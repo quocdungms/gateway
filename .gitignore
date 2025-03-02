@@ -1,0 +1,70 @@
+# Byte-compiled files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+.virtualenv/
+.env
+# PyCharm-specific files
+.idea/
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Unit test / coverage reports
+htmlcov/
+*.cover
+.coverage
+*.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.hypothesis/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Pipenv
+Pipfile.lock
+
+# Docker
+*.dockerignore
+
+# Flask
+instance/
+.webassets-cache
+
+# Celery
+celerybeat-schedule
+*.pid
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pytest
+.pytest_cache/
+
+# Other
+*.swp
+*.swo
