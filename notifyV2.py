@@ -7,7 +7,7 @@ from global_var import TAG_MAC, SERVER_URL, LOCATION_DATA_UUID, LOCATION_DATA_MO
 
 # Khởi tạo socketio client
 sio = socketio.AsyncClient()
-
+###
 # Danh sách anchor
 anchors = []
 
