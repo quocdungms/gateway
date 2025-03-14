@@ -56,14 +56,14 @@ async def notification_handler(sender, data, address):
     if tracking_enabled:
         # Tracking bật: Gửi ngay mỗi lần có notify
         await safe_emit("tag_data", {"mac": address, "data": decoded_data})
-        print(f"Tracking = {tracking_enabled}\nTag {address} gửi ngay!\n Data: {decoded_data} \n")
+        print(f"Tracking = {tracking_enabled}\nTag {address} gửi ngay!\nData: {decoded_data} \n")
     else:
         # Tracking tắt: Gửi xong rồi chờ 5s mới gửi tiếp
         last_sent = last_sent_time.get(address, 0)
         if current_time - last_sent >= INTERVAL:
             await safe_emit("tag_data", {"mac": address, "data": decoded_data})
             last_sent_time[address] = current_time
-            print(f"Tracing =  {tracking_enabled} - Delay: {INTERVAL}s\n Tag [{address}] gửi dữ liệu!\n Data: {decoded_data} \n")
+            print(f"Tracing = {tracking_enabled} - Delay: {INTERVAL}s\nTag [{address}] gửi dữ liệu!\nData: {decoded_data} \n")
 
 
 async def process_device(address, is_tag=False, max_retries=3):
