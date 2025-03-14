@@ -12,44 +12,33 @@ time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 tracking_enabled = False
 last_sent_time = {}  # Lưu thời gian gửi gần nhất của từng tag
 INTERVAL = 5
+TIMEOUT = 5
 DISCONNECTED_TAGS = set()  # Danh sách Tag bị mất kết nối
 
 
 async def safe_emit(event, data):
-    """Gửi dữ liệu lên server một cách an toàn."""
     if sio.connected:
         await sio.emit(event, data)
     else:
         print(f"❌ Không thể gửi '{event}' vì không kết nối với server!")
 
-
-# async def connect_to_server():
-#     """Kết nối server Socket.IO."""
-#     try:
-#         await sio.connect(SERVER_URL)
-#         print("✅ Đã kết nối với server")
-#     except Exception as e:
-#         print(f"❌ Lỗi kết nối server: {e}")
-#
 async def connect_to_server(max_retries=3):
-    """Kết nối đến server với khả năng tự động thử lại."""
     global sio
     for attempt in range(max_retries):
         try:
             print(f"🌐 Đang kết nối đến server (Thử lần {attempt + 1})...")
             await sio.connect(SERVER_URL)
             print("✅ Đã kết nối với server!")
-            return  # Thoát khỏi hàm nếu kết nối thành công
+            return
 
         except Exception as e:
             print(f"❌ Lỗi kết nối server: {e}")
-            await asyncio.sleep(5)  # Chờ 5 giây trước khi thử lại
+            await asyncio.sleep(TIMEOUT)
 
-    # Nếu sau max_retries vẫn lỗi, tiếp tục thử lại mỗi 10 giây
     while True:
         try:
-            print("🔄 Server vẫn chưa kết nối được, thử lại sau 10 giây...")
-            await asyncio.sleep(10)
+            print(f"🔄 Server vẫn chưa kết nối được, thử lại sau {TIMEOUT} giây...")
+            await asyncio.sleep(TIMEOUT)
             await sio.connect(SERVER_URL)
             print("✅ Server đã kết nối lại thành công!")
             return
@@ -61,7 +50,6 @@ async def connect_to_server_2(max_retries=3):
     """Kết nối đến server với khả năng tự động thử lại."""
     global sio
 
-    # Nếu đã kết nối thì không cần thử lại
     if sio.connected:
         print("✅ Server đã kết nối, không cần thử lại!")
         return
@@ -74,43 +62,34 @@ async def connect_to_server_2(max_retries=3):
             print(f"🌐 Đang kết nối đến server (Thử lần {attempt + 1})...")
             await sio.connect(SERVER_URL)
 
-            # Kiểm tra kết nối ngay sau khi connect
             if sio.connected:
                 print("✅ Đã kết nối với server!")
                 return  # Dừng vòng lặp nếu kết nối thành công
 
         except Exception as e:
             print(f"❌ Lỗi kết nối server: {e}")
-            await asyncio.sleep(5)  # Chờ 5 giây trước khi thử lại
+            await asyncio.sleep(TIMEOUT)  # Chờ trước khi thử lại
 
-    # Nếu sau max_retries vẫn lỗi, tiếp tục thử lại mỗi 10 giây
     while True:
-        if sio.connected:  # Kiểm tra lại trước khi thử kết nối
-            print("✅ Server đã kết nối, không cần thử nữa!")
+        if sio.connected:
+            print("✅ Server đã kết nối, không cần thử lại!")
             return
         try:
-            print("🔄 Server vẫn chưa kết nối được, thử lại sau 10 giây...")
-            await asyncio.sleep(10)
+            print(f"🔄 Server vẫn chưa kết nối được, thử lại sau {TIMEOUT} giây...")
+            await asyncio.sleep(TIMEOUT)
             await sio.connect(SERVER_URL)
 
-            # Kiểm tra kết nối ngay sau khi connect
             if sio.connected:
                 print("✅ Server đã kết nối lại thành công!")
-                return  # Dừng vòng lặp ngay nếu kết nối thành công
+                return
 
         except Exception as e:
             print(f"❌ Lỗi kết nối server: {e}")
-
-
 
 @sio.event
 async def disconnect():
     print("⚠️ Mất kết nối với server! Đang thử kết nối lại...")
     asyncio.create_task(connect_to_server_2())
-
-
-
-
 
 @sio.on("start_tracking")
 async def start_tracking(data=None):
@@ -155,8 +134,8 @@ async def process_anchor(address):
             print(f"🔍 Đang kết nối Anchor {address}...")
             await client.connect()
             if not client.is_connected:
-                print(f"❌ Không thể kết nối {address}, thử lại sau 5 giây...")
-                await asyncio.sleep(5)
+                print(f"❌ Không thể kết nối {address}, thử lại sau {TIMEOUT} giây...")
+                await asyncio.sleep(TIMEOUT)
                 continue
 
             print(f"✅ Đã kết nối {address}, đọc dữ liệu...")
@@ -173,13 +152,12 @@ async def process_anchor(address):
                 "data": decoded_data,
                 "operation_mode": operation_mode_binary
             })
-
             # Gửi thành công thì kết thúc vòng lặp, không quét lại
             break
 
         except BleakError as e:
             print(f"❌ Lỗi BLE {address}: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(TIMEOUT)
         except Exception as e:
             print(f"❌ Lỗi không xác định với {address}: {e}")
         finally:
@@ -199,12 +177,11 @@ async def process_tag(address, max_retries=3):
                 await client.connect()
                 if not client.is_connected:
                     print(f"❌ Không thể kết nối {address}, thử lần {attempt + 1}")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(TIMEOUT)
                     continue
 
                 print(f"✅ Kết nối {address} thành công, bắt đầu nhận dữ liệu...")
                 DISCONNECTED_TAGS.discard(address)  # Đánh dấu là đã kết nối lại
-
                 # Nhận notify từ Tag
                 await client.start_notify(LOCATION_DATA_UUID,
                                           lambda s, d: asyncio.create_task(notification_handler(s, d, address))
@@ -224,9 +201,9 @@ async def process_tag(address, max_retries=3):
                     await client.disconnect()
 
         # Nếu thử 3 lần vẫn lỗi thì vào chế độ chờ, quét lại mỗi 10s
-        print(f"🔄 Không thể kết nối {address}, vào chế độ chờ...")
+        print(f"🔄 Không thể kết nối {address}, thử lại sau {TIMEOUT}s ...")
         DISCONNECTED_TAGS.add(address)
-        await asyncio.sleep(10)
+        await asyncio.sleep(TIMEOUT)
 
 
 async def main():
@@ -239,11 +216,13 @@ async def main():
     print(f"Danh sách anchor: {anchors}")
 
     # Xử lý từng anchor (chỉ chạy một lần)
-    for anchor in anchors:
-        await process_anchor(anchor)
+    # for anchor in anchors:
+    #     await process_anchor(anchor)
+
+    anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
+    await asyncio.gather(*anchor_tasks)
 
     print("Chờ server lệnh để xử lý Tag...")
-
     # Khởi chạy task cho từng Tag
     tasks = [asyncio.create_task(process_tag(tag)) for tag in TAG_MAC_LIST]
     await asyncio.gather(*tasks)
