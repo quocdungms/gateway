@@ -8,7 +8,7 @@ from global_var import *
 
 
 # for kalman ######################
-from filterpy.kalman import KalmanFilter
+# from filterpy.kalman import KalmanFilter
 import numpy as np
 ###################################
 
@@ -54,21 +54,34 @@ async def connect_to_server(max_retries=3):
             print(f"❌ Lỗi kết nối server: {e}")
 
 
+# Khởi tạo bộ lọc Kalman thủ công
 kalman_filters = {}
 
 def init_kalman_filter():
-    kf = KalmanFilter(dim_x=4, dim_z=2)  # 4 trạng thái (x, vx, y, vy), 2 đo lường (x, y)
-    kf.F = np.array([[1, 1, 0, 0],  # Ma trận chuyển đổi trạng thái
-                      [0, 1, 0, 0],
-                      [0, 0, 1, 1],
-                      [0, 0, 0, 1]])
-    kf.H = np.array([[1, 0, 0, 0],  # Ma trận đo lường
-                      [0, 0, 1, 0]])
-    kf.P *= 1000  # Ma trận hiệp phương sai ban đầu
-    kf.R *= 5  # Nhiễu đo lường
-    kf.Q *= 0.01  # Nhiễu quá trình
+    kf = {
+        "x": np.array([[0], [0], [0], [0]]),  # Trạng thái [x, vx, y, vy]
+        "P": np.eye(4) * 1000,  # Hiệp phương sai
+        "F": np.array([[1, 1, 0, 0],
+                        [0, 1, 0, 0],
+                        [0, 0, 1, 1],
+                        [0, 0, 0, 1]]),
+        "H": np.array([[1, 0, 0, 0],
+                        [0, 0, 1, 0]]),
+        "R": np.eye(2) * 5,  # Nhiễu đo lường
+        "Q": np.eye(4) * 0.01  # Nhiễu quá trình
+    }
     return kf
 
+def kalman_predict(kf):
+    kf["x"] = np.dot(kf["F"], kf["x"])
+    kf["P"] = np.dot(np.dot(kf["F"], kf["P"]), kf["F"].T) + kf["Q"]
+
+def kalman_update(kf, z):
+    y = z - np.dot(kf["H"], kf["x"])
+    S = np.dot(np.dot(kf["H"], kf["P"]), kf["H"].T) + kf["R"]
+    K = np.dot(np.dot(kf["P"], kf["H"].T), np.linalg.inv(S))
+    kf["x"] += np.dot(K, y)
+    kf["P"] = np.dot((np.eye(4) - np.dot(K, kf["H"])), kf["P"])
 
 async def notification_handler_kalman(sender, data, address):
     global tracking_enabled, last_sent_time, INTERVAL, kalman_filters
@@ -78,12 +91,12 @@ async def notification_handler_kalman(sender, data, address):
     x, y = decoded_data.get("x", 0), decoded_data.get("y", 0)
     if address not in kalman_filters:
         kalman_filters[address] = init_kalman_filter()
-        kalman_filters[address].x = np.array([[x], [0], [y], [0]])
+        kalman_filters[address]["x"] = np.array([[x], [0], [y], [0]])
 
     kf = kalman_filters[address]
-    kf.predict()
-    kf.update(np.array([[x], [y]]))
-    smoothed_x, smoothed_y = kf.x[0, 0], kf.x[2, 0]
+    kalman_predict(kf)
+    kalman_update(kf, np.array([[x], [y]]))
+    smoothed_x, smoothed_y = kf["x"][0, 0], kf["x"][2, 0]
 
     filtered_data = {"x": smoothed_x, "y": smoothed_y}
 
