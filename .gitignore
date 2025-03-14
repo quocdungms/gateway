@@ -4,7 +4,8 @@
 *.pyd
 __pycache__/
 
-
+# custom scripts
+*.sh
 
 # Virtual environment
 venv/

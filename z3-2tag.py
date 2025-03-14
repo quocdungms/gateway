@@ -74,7 +74,7 @@ async def process_device(address, is_tag=False, max_retries=3):
             await client.connect()
             if not client.is_connected:
                 print(f"❌ Không thể kết nối {address}, thử lần {attempt + 1}")
-                await asyncio.sleep(2)
+                await asyncio.sleep(5)
                 continue
 
             print(f"✅ Kết nối {address} thành công")
