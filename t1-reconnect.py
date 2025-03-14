@@ -61,36 +61,45 @@ async def connect_to_server_2(max_retries=3):
     """Kết nối đến server với khả năng tự động thử lại."""
     global sio
 
-    # Nếu đã kết nối thì không cần kết nối lại
+    # Nếu đã kết nối thì không cần thử lại
     if sio.connected:
         print("✅ Server đã kết nối, không cần thử lại!")
         return
 
     for attempt in range(max_retries):
+        if sio.connected:  # Kiểm tra lại trước khi thử kết nối
+            print("✅ Server đã kết nối, không cần thử nữa!")
+            return
         try:
             print(f"🌐 Đang kết nối đến server (Thử lần {attempt + 1})...")
             await sio.connect(SERVER_URL)
-            print("✅ Đã kết nối với server!")
-            return  # Thoát khỏi hàm nếu kết nối thành công
+
+            # Kiểm tra kết nối ngay sau khi connect
+            if sio.connected:
+                print("✅ Đã kết nối với server!")
+                return  # Dừng vòng lặp nếu kết nối thành công
 
         except Exception as e:
             print(f"❌ Lỗi kết nối server: {e}")
             await asyncio.sleep(5)  # Chờ 5 giây trước khi thử lại
 
     # Nếu sau max_retries vẫn lỗi, tiếp tục thử lại mỗi 10 giây
-    while not sio.connected:  # Chỉ thử lại nếu vẫn chưa kết nối được
+    while True:
+        if sio.connected:  # Kiểm tra lại trước khi thử kết nối
+            print("✅ Server đã kết nối, không cần thử nữa!")
+            return
         try:
             print("🔄 Server vẫn chưa kết nối được, thử lại sau 10 giây...")
             await asyncio.sleep(10)
             await sio.connect(SERVER_URL)
 
-            if sio.connected:  # Kiểm tra lại lần nữa sau khi thử kết nối
+            # Kiểm tra kết nối ngay sau khi connect
+            if sio.connected:
                 print("✅ Server đã kết nối lại thành công!")
-                return
+                return  # Dừng vòng lặp ngay nếu kết nối thành công
 
         except Exception as e:
             print(f"❌ Lỗi kết nối server: {e}")
-
 
 
 
