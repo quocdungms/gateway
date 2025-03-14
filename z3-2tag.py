@@ -118,13 +118,16 @@ async def main():
     devices = await BleakScanner.discover(10)
     anchors = [dev.address for dev in devices if dev.address in MAC_ADDRESS_ANCHOR_LIST]
     print(f"Danh sách anchor: {anchors}")
+    for anchor in anchors:
+        await process_device(anchor, is_tag=False)
+
+
 
     print("Chờ server lệnh để xử lý Tag...")
-
     # Khởi chạy task cho từng Tag
     tasks = [asyncio.create_task(process_device(tag, is_tag=True)) for tag in TAG_MAC_LIST]
-
     await asyncio.gather(*tasks)  # Đợi tất cả task hoàn thành
+
     await sio.disconnect()
 
 
