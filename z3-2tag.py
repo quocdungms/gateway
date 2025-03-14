@@ -12,7 +12,7 @@ time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 
 tracking_enabled = False
 last_sent_time = {}  # Lưu thời gian gửi gần nhất của từng tag
-
+INTERVAL = 5
 async def safe_emit(event, data):
     """Gửi dữ liệu lên server một cách an toàn."""
     if sio.connected:
@@ -25,9 +25,9 @@ async def connect_to_server():
     """Kết nối server Socket.IO."""
     try:
         await sio.connect(SERVER_URL)
-        print("✅ Đã kết nối với server")
+        print("Đã kết nối với server")
     except Exception as e:
-        print(f"❌ Lỗi kết nối server: {e}")
+        print(f"Lỗi kết nối server: {e}")
 
 
 @sio.on("start_tracking")
@@ -35,7 +35,7 @@ async def start_tracking(data=None):
     """Bật tracking từ server."""
     global tracking_enabled
     tracking_enabled = True
-    print("🚀 Tracking đã bật!")
+    print("Tracking đã bật!")
 
 
 @sio.on("stop_tracking")
@@ -43,26 +43,27 @@ async def stop_tracking(data=None):
     """Tắt tracking từ server."""
     global tracking_enabled
     tracking_enabled = False
-    print("🛑 Tracking đã dừng!")
+    print("Tracking đã dừng!")
 
 
 async def notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
-    global tracking_enabled, last_sent_time
+
+    global tracking_enabled, last_sent_time, INTERVAL
     decoded_data = decode_location_data(data)
     current_time = time.time()
 
     if tracking_enabled:
         # Tracking bật: Gửi ngay mỗi lần có notify
         await safe_emit("tag_data", {"mac": address, "data": decoded_data})
-        print(f"📡 [Tracking] Tag {address} gửi ngay: {decoded_data}")
+        print(f"Tracking = {tracking_enabled}\nTag {address} gửi ngay!\n Data: {decoded_data} \n")
     else:
         # Tracking tắt: Gửi xong rồi chờ 5s mới gửi tiếp
         last_sent = last_sent_time.get(address, 0)
-        if current_time - last_sent >= 5:
+        if current_time - last_sent >= INTERVAL:
             await safe_emit("tag_data", {"mac": address, "data": decoded_data})
             last_sent_time[address] = current_time
-            print(f"⌛ [Delay] Tag {address} gửi rồi đợi 5s: {decoded_data}")
+            print(f"Tracing =  {tracking_enabled} - Delay: {INTERVAL}s\n Tag [{address}] gửi dữ liệu!\n Data: {decoded_data} \n")
 
 
 async def process_device(address, is_tag=False, max_retries=3):
@@ -72,7 +73,7 @@ async def process_device(address, is_tag=False, max_retries=3):
         try:
             await client.connect()
             if not client.is_connected:
-                print(f"❌ Không thể kết nối {address}, thử lần {attempt + 1}")
+                print(f"Không thể kết nối {address}, thử lần {attempt + 1}")
                 await asyncio.sleep(2)
                 continue
 
@@ -98,12 +99,12 @@ async def process_device(address, is_tag=False, max_retries=3):
             break  # Thoát vòng lặp nếu kết nối thành công
 
         except BleakError as e:
-            print(f"⚠️ Lỗi BLE {address}: {e}")
+            print(f"Lỗi BLE {address}: {e}")
             await asyncio.sleep(2)  # Đợi trước khi thử lại
         except asyncio.TimeoutError:
-            print(f"⏳ Timeout khi kết nối {address}")
+            print(f"Timeout khi kết nối {address}")
         except Exception as e:
-            print(f"🚨 Lỗi không xác định với {address}: {e}")
+            print(f"Lỗi không xác định với {address}: {e}")
         finally:
             if client.is_connected:
                 await client.disconnect()
@@ -116,9 +117,9 @@ async def main():
     # Tìm các thiết bị BLE
     devices = await BleakScanner.discover(10)
     anchors = [dev.address for dev in devices if dev.address in MAC_ADDRESS_ANCHOR_LIST]
-    print(f"🛰️ Danh sách anchor: {anchors}")
+    print(f"Danh sách anchor: {anchors}")
 
-    print("📡 Chờ server lệnh để xử lý Tag...")
+    print("Chờ server lệnh để xử lý Tag...")
 
     # Khởi chạy task cho từng Tag
     tasks = [asyncio.create_task(process_device(tag, is_tag=True)) for tag in TAG_MAC_LIST]
@@ -131,4 +132,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except RuntimeError as e:
-        print(f"❌ Lỗi runtime: {e}")
+        print(f"Lỗi runtime: {e}")
