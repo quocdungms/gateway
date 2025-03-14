@@ -23,13 +23,48 @@ async def safe_emit(event, data):
         print(f"❌ Không thể gửi '{event}' vì không kết nối với server!")
 
 
-async def connect_to_server():
-    """Kết nối server Socket.IO."""
-    try:
-        await sio.connect(SERVER_URL)
-        print("✅ Đã kết nối với server")
-    except Exception as e:
-        print(f"❌ Lỗi kết nối server: {e}")
+# async def connect_to_server():
+#     """Kết nối server Socket.IO."""
+#     try:
+#         await sio.connect(SERVER_URL)
+#         print("✅ Đã kết nối với server")
+#     except Exception as e:
+#         print(f"❌ Lỗi kết nối server: {e}")
+#
+async def connect_to_server(max_retries=3):
+    """Kết nối đến server với khả năng tự động thử lại."""
+    global sio
+    for attempt in range(max_retries):
+        try:
+            print(f"🌐 Đang kết nối đến server (Thử lần {attempt + 1})...")
+            await sio.connect(SERVER_URL)
+            print("✅ Đã kết nối với server!")
+            return  # Thoát khỏi hàm nếu kết nối thành công
+
+        except Exception as e:
+            print(f"❌ Lỗi kết nối server: {e}")
+            await asyncio.sleep(5)  # Chờ 5 giây trước khi thử lại
+
+    # Nếu sau max_retries vẫn lỗi, tiếp tục thử lại mỗi 10 giây
+    while True:
+        try:
+            print("🔄 Server vẫn chưa kết nối được, thử lại sau 10 giây...")
+            await asyncio.sleep(10)
+            await sio.connect(SERVER_URL)
+            print("✅ Server đã kết nối lại thành công!")
+            return
+        except Exception as e:
+            print(f"❌ Lỗi kết nối server: {e}")
+
+
+@sio.event
+async def disconnect():
+    """Khi server bị mất kết nối, tự động thử lại."""
+    print("⚠️ Mất kết nối với server! Đang thử kết nối lại...")
+    asyncio.create_task(connect_to_server())
+
+
+
 
 
 @sio.on("start_tracking")
