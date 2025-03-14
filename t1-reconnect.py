@@ -57,6 +57,43 @@ async def connect_to_server(max_retries=3):
             print(f"❌ Lỗi kết nối server: {e}")
 
 
+async def connect_to_server_2(max_retries=3):
+    """Kết nối đến server với khả năng tự động thử lại."""
+    global sio
+
+    # Nếu đã kết nối thì không cần kết nối lại
+    if sio.connected:
+        print("✅ Server đã kết nối, không cần thử lại!")
+        return
+
+    for attempt in range(max_retries):
+        try:
+            print(f"🌐 Đang kết nối đến server (Thử lần {attempt + 1})...")
+            await sio.connect(SERVER_URL)
+            print("✅ Đã kết nối với server!")
+            return  # Thoát khỏi hàm nếu kết nối thành công
+
+        except Exception as e:
+            print(f"❌ Lỗi kết nối server: {e}")
+            await asyncio.sleep(5)  # Chờ 5 giây trước khi thử lại
+
+    # Nếu sau max_retries vẫn lỗi, tiếp tục thử lại mỗi 10 giây
+    while not sio.connected:  # Chỉ thử lại nếu vẫn chưa kết nối được
+        try:
+            print("🔄 Server vẫn chưa kết nối được, thử lại sau 10 giây...")
+            await asyncio.sleep(10)
+            await sio.connect(SERVER_URL)
+
+            if sio.connected:  # Kiểm tra lại lần nữa sau khi thử kết nối
+                print("✅ Server đã kết nối lại thành công!")
+                return
+
+        except Exception as e:
+            print(f"❌ Lỗi kết nối server: {e}")
+
+
+
+
 @sio.event
 async def disconnect():
     """Khi server bị mất kết nối, tự động thử lại."""
@@ -186,7 +223,7 @@ async def process_tag(address, max_retries=3):
 
 async def main():
     """Chương trình chính."""
-    await connect_to_server()
+    await connect_to_server_2()
 
     # Tìm các thiết bị BLE
     devices = await BleakScanner.discover(10)
