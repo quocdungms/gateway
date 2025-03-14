@@ -18,16 +18,16 @@ async def safe_emit(event, data):
     if sio.connected:
         await sio.emit(event, data)
     else:
-        print(f"Không thể gửi '{event}' vì không kết nối với server!")
+        print(f"❌ Không thể gửi '{event}' vì không kết nối với server!")
 
 
 async def connect_to_server():
     """Kết nối server Socket.IO."""
     try:
         await sio.connect(SERVER_URL)
-        print("Đã kết nối với server")
+        print("✅ Đã kết nối với server")
     except Exception as e:
-        print(f"Lỗi kết nối server: {e}")
+        print(f"❌ Lỗi kết nối server: {e}")
 
 
 @sio.on("start_tracking")
@@ -73,14 +73,14 @@ async def process_device(address, is_tag=False, max_retries=3):
         try:
             await client.connect()
             if not client.is_connected:
-                print(f"Không thể kết nối {address}, thử lần {attempt + 1}")
+                print(f"❌ Không thể kết nối {address}, thử lần {attempt + 1}")
                 await asyncio.sleep(2)
                 continue
 
             print(f"✅ Kết nối {address} thành công")
 
             if is_tag:
-                print(f"🕹️ Chờ server cho phép tracking từ {address}...")
+                print(f"Chờ server cho phép tracking từ {address}...")
                 await client.start_notify(LOCATION_DATA_UUID, lambda s, d: asyncio.create_task(notification_handler(s, d, address)))
 
                 while True:
@@ -93,18 +93,18 @@ async def process_device(address, is_tag=False, max_retries=3):
                 operation_mode_value = int.from_bytes(operation_mode_data[:2], byteorder="big")
                 operation_mode_binary = f"{operation_mode_value:016b}"
 
-                print(f"🏗️ Anchor {address} gửi dữ liệu: {decoded_data}")
+                print(f"Anchor {address} gửi dữ liệu: {decoded_data}")
                 await safe_emit("anchor_data", {"mac": address, "data": decoded_data, "operation_mode": operation_mode_binary})
 
             break  # Thoát vòng lặp nếu kết nối thành công
 
         except BleakError as e:
-            print(f"Lỗi BLE {address}: {e}")
+            print(f"❌ Lỗi BLE {address}: {e}")
             await asyncio.sleep(2)  # Đợi trước khi thử lại
         except asyncio.TimeoutError:
-            print(f"Timeout khi kết nối {address}")
+            print(f"❌ Timeout khi kết nối {address}")
         except Exception as e:
-            print(f"Lỗi không xác định với {address}: {e}")
+            print(f"❌ Lỗi không xác định với {address}: {e}")
         finally:
             if client.is_connected:
                 await client.disconnect()
@@ -135,4 +135,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except RuntimeError as e:
-        print(f"Lỗi runtime: {e}")
+        print(f"❌ Lỗi runtime: {e}")
