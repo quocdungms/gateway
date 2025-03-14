@@ -105,9 +105,8 @@ async def connect_to_server_2(max_retries=3):
 
 @sio.event
 async def disconnect():
-    """Khi server bị mất kết nối, tự động thử lại."""
     print("⚠️ Mất kết nối với server! Đang thử kết nối lại...")
-    asyncio.create_task(connect_to_server())
+    asyncio.create_task(connect_to_server_2())
 
 
 
