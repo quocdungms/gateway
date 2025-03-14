@@ -1,5 +1,7 @@
 import asyncio
 import struct
+
+
 import socketio
 from bleak import BleakClient, BleakScanner, BleakError
 from location import decode_location_data
@@ -8,9 +10,23 @@ from global_var import TAG_MAC, SERVER_URL, LOCATION_DATA_UUID, LOCATION_DATA_MO
 # Khởi tạo socketio client
 sio = socketio.AsyncClient()
 
+
+@sio.event
+async def connect():
+    print("")
+
+@sio.event
+async def disconnect():
+    print("Đã ngắt kết nối với server")
+
+@sio.on('server_message')
+async  def on_server_message(data):
+    print(f"Nhận message từ server: {data}")
+    ## xy ly data
+
+###
 # Danh sách anchor
 anchors = []
-
 
 async def safe_emit(event, data):
     if sio.connected:
@@ -18,13 +34,11 @@ async def safe_emit(event, data):
     else:
         print(f"Không thể gửi '{event}' vì không kết nối với server!")
 
-
 def notification_handler(sender, data):
     decoded_data = decode_location_data(data)
     print(f"Nhận dữ liệu từ {sender}: {decoded_data}")
     asyncio.create_task(safe_emit("tag_data", {"mac": str(sender), "data": decoded_data}))
-
-
+1
 async def connect_to_server():
     try:
         await sio.connect(SERVER_URL)
@@ -34,13 +48,14 @@ async def connect_to_server():
 
 
 async def process_device(address, is_tag=False):
+
     try:
         async with BleakClient(address) as client:
             if not await client.is_connected():
                 print(f"Không thể kết nối tới {address}")
                 return
             print(f"Đã kết nối tới {address}")
-
+            
             loc_mode_data = await client.read_gatt_char(LOCATION_DATA_MODE_UUID)
             loc_mode = int(loc_mode_data[0])
             print(f"Location Data Mode ({address}): {loc_mode}")
@@ -48,7 +63,7 @@ async def process_device(address, is_tag=False):
             if is_tag:
                 await client.start_notify(LOCATION_DATA_UUID, notification_handler)
                 print(f"Tag {address} đang gửi data...")
-                await asyncio.sleep(6000)
+                await asyncio.sleep(600)
                 await client.stop_notify(LOCATION_DATA_UUID)
             else:
                 data = await client.read_gatt_char(LOCATION_DATA_UUID)
@@ -62,27 +77,31 @@ async def process_device(address, is_tag=False):
     except Exception as e:
         print(f"Lỗi không xác định với {address}: {e}")
 
-
 async def main():
     await connect_to_server()
-
-    devices = await BleakScanner.discover(10)
-
+    
+    devices = await BleakScanner.discover(timeout=10)
+    
     for device in devices:
         if device.address in MAC_ADDRESS_ANCHOR_LIST:
             anchors.append(device.address)
-
+    
     print(f"Danh sách anchor: {anchors}")
+    
+    # for anchor in anchors:
+    #     await process_device(anchor, is_tag=False)
 
-    for anchor in anchors:
-        await process_device(anchor, is_tag=False)
-
+    anchor_tasks = [process_device(anchor, is_tag=False) for anchor in anchors]
+    await asyncio.gather(*anchor_tasks)
+    
     print("Bắt đầu xử lý Tag...")
-    await process_device(TAG_MAC, is_tag=True)
-
+    tag_tasks = [process_device(TAG_MAC, is_tag=True)]
+    await asyncio.gather(*tag_tasks)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except RuntimeError:
         print("Lỗi: Event loop đã đóng hoặc không thể khởi chạy lại")
+    except KeyboardInterrupt:
+        print("Chương trình bị dừng bởi người dùng")

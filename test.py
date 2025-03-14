@@ -1,18 +1,13 @@
 import asyncio
 import struct
-from time import sleep
-import time
-import pytz
 import socketio
 from bleak import BleakClient, BleakScanner, BleakError
 from location import decode_location_data
-# from global_var import TAG_MAC, SERVER_URL, LOCATION_DATA_UUID, LOCATION_DATA_MODE_UUID, MAC_ADDRESS_ANCHOR_LIST, \
-#     OPERATION_MODE_UUID
-from global_var import *
-from datetime import datetime
+from global_var import TAG_MAC, SERVER_URL, LOCATION_DATA_UUID, LOCATION_DATA_MODE_UUID, MAC_ADDRESS_ANCHOR_LIST, \
+    OPERATION_MODE_UUID, TAG_LIST
+
 sio = socketio.AsyncClient()
 
-time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 anchors = []
 tracking_enabled = False  # Biến để kiểm soát việc gửi dữ liệu từ Tag
 
@@ -23,6 +18,21 @@ async def safe_emit(event, data):
     else:
         print(f"Không thể gửi '{event}' vì không kết nối với server!")
 
+
+def notification_handler(sender, data, address):
+    decoded_data = decode_location_data(data)
+    print(f"Nhận dữ liệu từ {address}: {decoded_data}")
+
+    if tracking_enabled:
+        asyncio.create_task(safe_emit("tag_data", {"mac": str(address), "data": decoded_data}))
+
+def _notification_handler(sender, data):
+    decoded_data = decode_location_data(data)
+    print(f"Nhận dữ liệu từ {sender}: {decoded_data}")
+
+    if tracking_enabled:
+        asyncio.create_task(safe_emit("tag_data", {"mac": str(sender), "data": decoded_data}))
+        asyncio.sleep(10)
 
 async def connect_to_server():
     try:
@@ -84,58 +94,15 @@ async def update_operation_mode(data):
         print(f"Lỗi không xác định với {mac_address}: {e}")
 
 
-def notification_handler(sender, data, address):
-    # global current_time
-    decoded_data = decode_location_data(data)
-    # print(f"Nhận dữ liệu từ {address}: {decoded_data}")
-
-    if tracking_enabled:
-        asyncio.create_task(safe_emit("tag_data", {"mac": str(address), "data": decoded_data}))
-        current_time = datetime.now(time_zone).strftime("%Y-%m-%d %H:%M:%S")
-        print(f"Tag: {str(address)} gửi dữ liệu. Time: {str(current_time)} \n data: {decoded_data}\n")
-
-
-
-last_sent_time = {}  # Lưu thời gian gửi cuối cùng của từng tag
-cached_data = {}  # Lưu dữ liệu gần nhất của từng tag
-
-async def notification_handler_test(sender, data, address):
-    global last_sent_time, cached_data
-    decoded_data = decode_location_data(data)
-
-    current_time = time.time()  # Lấy thời gian hiện tại
-    last_time = last_sent_time.get(address, 0)  # Lấy lần gửi gần nhất của tag này
-
-    if tracking_enabled:
-        # Nếu tracking_enabled == True, gửi ngay lập tức
-        await safe_emit("tag_data", {"mac": address, "data": decoded_data})
-        print(f"Tag {address} gửi dữ liệu ngay lập tức: {decoded_data}")
-    else:
-        # Lưu dữ liệu vào cache
-        cached_data[address] = decoded_data
-
-        # Nếu đã qua 5 giây thì mới gửi dữ liệu
-        if current_time - last_time >= 5:
-            await safe_emit("tag_data", {"mac": address, "data": cached_data[address]})
-            last_sent_time[address] = current_time
-            print(f"Tag {address} gửi dữ liệu sau 5 giây: {decoded_data}")
-
-
-
 async def process_device(address, is_tag=False, max_retries=3):
     client = BleakClient(address)
     for attempt in range(max_retries):
         try:
-            if await client.is_connected():
-                print(f"Đã kết nối với {address}, bỏ qua kết nối lại.")
-            else:
-                await client.connect()
-
+            await client.connect()
             if not await client.is_connected():
                 print(f"Không thể kết nối tới {address}, thử lại lần {attempt + 1}")
                 await asyncio.sleep(2)
                 continue  # Thử lại nếu không kết nối được
-
             print(f"Đã kết nối tới {address}")
 
             # loc_mode_data = await client.read_gatt_char(LOCATION_DATA_MODE_UUID)
@@ -146,23 +113,23 @@ async def process_device(address, is_tag=False, max_retries=3):
                 print(f"Chờ lệnh từ server để bắt đầu gửi dữ liệu từ tag {address}...")
                 while True:
                     if tracking_enabled:
-                        await client.start_notify(LOCATION_DATA_UUID,
-                                                  lambda sender, data: notification_handler_test(sender, data, address))
-                        print(f"Tag {address} đang gửi data... Tracking = true")
+                        await client.start_notify(LOCATION_DATA_UUID, lambda sender, data: notification_handler(sender, data, address))
+                        print(f"Tag {address} đang gửi data...")
                         await asyncio.sleep(2)
                         await client.stop_notify(LOCATION_DATA_UUID)
                     else:
-                        # data = await client.read_gatt_char(LOCATION_DATA_UUID)
-                        # decoded_data = decode_location_data(data)
-                        # await safe_emit("tag_data", {"mac": address, "data": decoded_data})
-                        # current_time = datetime.now(time_zone).strftime("%Y-%m-%d %H:%M:%S")
-                        # print(f"Tag: {str(address)} gửi dữ liệu. Time: {str(current_time)} \n data: {decoded_data} \n")
-                        # await asyncio.sleep(5)
+                        data = await client.read_gatt_char(LOCATION_DATA_UUID)
+                        decoded_data = decode_location_data(data)
+                        print(f"Nhận dữ liệu từ {address}: {decoded_data}")
+                        await safe_emit("tag_data", {"mac": address, "data": decoded_data})
+                        await asyncio.sleep(5)
 
-                        await client.start_notify(LOCATION_DATA_UUID, lambda sender, data: notification_handler_test(sender, data,address))
-                        print(f"Tag {address} đang gửi data... Tracking = False")
-                        await asyncio.sleep(2)
-                        await client.stop_notify(LOCATION_DATA_UUID)
+
+                        # await client.start_notify(LOCATION_DATA_UUID, _notification_handler)
+                        # print(f"Tag {address} đang gửi data...")
+                        # await asyncio.sleep(2)
+                        # await client.stop_notify(LOCATION_DATA_UUID)
+
 
             else:
                 data = await client.read_gatt_char(LOCATION_DATA_UUID)
@@ -172,23 +139,29 @@ async def process_device(address, is_tag=False, max_retries=3):
                 operation_mode_binary = f"{operation_mode_value:016b}"
                 print(f"Operation Mode (Binary 16-bit): {operation_mode_binary}")
                 print(f"Anchor {address} gửi dữ liệu: {decoded_data}")
+
                 await safe_emit("anchor_data",
                                 {"mac": address, "data": decoded_data, "operation_mode_data": operation_mode_binary})
+
+                # await client.start_notify(OPERATION_MODE_UUID,
+                #                           lambda slender, data: notification_handler(slender, data, address))
+                # await asyncio.sleep(2)
+                # await client.stop_notify(OPERATION_MODE_UUID)
+                #
+                # await client.start_notify(LOCATION_DATA_UUID,
+                #                           lambda slender, data: notification_handler(slender, data, address))
+                # await asyncio.sleep(2)
+                # await client.stop_notify(LOCATION_DATA_UUID)
             break  # Thoát vòng lặp nếu kết nối thành công
 
         except BleakError as e:
-            if "org.bluez.Error.InProgress" in str(e):
-                print(f"Lỗi BLE với {address}: Operation already in progress, chờ 5 giây rồi thử lại...")
-                await asyncio.sleep(2)  # Đợi rồi thử lại
-                continue
             print(f"Lỗi BLE với {address}: {e}")
         except asyncio.TimeoutError:
             print(f"Timeout khi kết nối với {address}")
         except Exception as e:
             print(f"Lỗi không xác định với {address}: {e}")
         finally:
-            if await client.is_connected():
-                await client.disconnect()  # Đảm bảo đóng kết nối
+            await client.disconnect()  # Đảm bảo luôn đóng kết nối BLE khi kết thúc
 
 
 async def main():
@@ -201,21 +174,17 @@ async def main():
             anchors.append(device.address)
 
     print(f"Danh sách anchor: {anchors}")
-    #
-    # for anchor in anchors:
-    #     await process_device(anchor, is_tag=False)
-    #     # asyncio.create_task(process_device(anchor, is_tag=False))
+
+    for anchor in anchors:
+        await process_device(anchor, is_tag=False)
+        # asyncio.create_task(process_device(anchor, is_tag=False))
 
     print("Chờ lệnh từ server để xử lý Tag...")
-    # asyncio.create_task(process_device(TAG_MAC, is_tag=True))
+    task = []
+    for tag in TAG_LIST:
+        task.append(process_device(tag, is_tag=True))
+    await asyncio.gather(*task)
     # await process_device(TAG_MAC, is_tag=True)
-
-    # for tag in TAG_MAC_LIST:
-    #     asyncio.create_task(process_device(tag, is_tag=True))
-    #     await asyncio.sleep(5)
-
-    tasks = [asyncio.create_task(process_device(tag, is_tag=True)) for tag in TAG_MAC_LIST]
-    await asyncio.gather(*tasks)
     await sio.disconnect()
 
 
