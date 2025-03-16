@@ -3,8 +3,7 @@ import struct
 import socketio
 from bleak import BleakClient, BleakScanner, BleakError
 from location import decode_location_data
-from global_var import TAG_MAC, SERVER_URL, LOCATION_DATA_UUID, LOCATION_DATA_MODE_UUID, MAC_ADDRESS_ANCHOR_LIST, \
-    OPERATION_MODE_UUID, TAG_LIST
+from global_var import *
 
 sio = socketio.AsyncClient()
 

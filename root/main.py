@@ -5,9 +5,6 @@ import socketio
 from bleak import BleakClient, BleakScanner, BleakError
 from location import decode_location_data
 from global_var import *
-from utils import *
-
-
 
 sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
@@ -110,7 +107,7 @@ async def stop_tracking(data=None):
     print("Tracking đã dừng!")
 
 
-async def tag_callback(sender, data, address):
+async def notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
     global tracking_enabled, last_sent_time, INTERVAL
     decoded_data = decode_location_data(data)
@@ -126,74 +123,6 @@ async def tag_callback(sender, data, address):
             last_sent_time[address] = current_time
             print(
                 f"Tracing = {tracking_enabled} - Delay: {INTERVAL}s\nTag [{address}] gửi dữ liệu!\nData: {decoded_data} \n")
-
-
-
-def bytes_array_to_bits(data):
-    bit_string = ""
-    for byte in data:
-        bits = bin(byte)[2:].zfill(8)
-        bit_string += bits + " "
-    return bit_string.strip()
-
-async def process_anchor_2(address):
-    """Xử lý kết nối với Anchor: Chuyển từ read sang notify và gửi cả location & operation mode"""
-    client = BleakClient(address)
-    anchor_data = {"location": None, "operation_mode": None}  # Lưu dữ liệu trước khi gửi
-
-    async def anchor_notification_handler(sender, data):
-        nonlocal anchor_data
-        if sender == LOCATION_DATA_UUID:
-            anchor_data["location"] = decode_location_data(data)
-        elif sender == OPERATION_MODE_UUID:
-            operation_mode_value = bytes_array_to_bits(data)
-            anchor_data["operation_mode"] = operation_mode_value # Chuyển sang dạng nhị phân
-
-        # Chỉ gửi lên server khi cả hai dữ liệu đều đã có
-        if anchor_data["location"] is not None and anchor_data["operation_mode"] is not None:
-            print(f"📡 Anchor {address} gửi dữ liệu: {anchor_data['location']}, Mode: {anchor_data['operation_mode']}")
-            # await safe_emit("anchor_data", {
-            #     "mac": address,
-            #     "data": anchor_data["location"],
-            #     "operation_mode": anchor_data["operation_mode"]
-            # })
-            # Reset dữ liệu để nhận gói mới
-            anchor_data = {"location": None, "operation_mode": None}
-
-    while True:
-        try:
-            print(f"🔍 Đang kết nối Anchor {address}...")
-            await client.connect()
-            if not client.is_connected:
-                print(f"❌ Không thể kết nối {address}, thử lại sau {TIMEOUT} giây...")
-                await asyncio.sleep(TIMEOUT)
-                continue
-
-            print(f"✅ Đã kết nối {address}, bắt đầu nhận notify...")
-
-            # Đăng ký nhận notify từ Anchor cho cả 2 đặc tính
-            await client.start_notify(LOCATION_DATA_UUID, anchor_notification_handler)
-            await asyncio.sleep(2)
-            await client.stop_notify(LOCATION_DATA_UUID)
-
-
-            await client.start_notify(OPERATION_MODE_UUID, anchor_notification_handler)
-            await asyncio.sleep(2)
-            await client.stop_notify(OPERATION_MODE_UUID)
-
-            # while client.is_connected:
-            #     await asyncio.sleep(1)  # Giữ kết nối
-
-        except BleakError as e:
-            print(f"❌ Lỗi BLE {address}: {e}")
-            await asyncio.sleep(TIMEOUT)
-        except Exception as e:
-            print(f"❌ Lỗi không xác định với {address}: {e}")
-        finally:
-            if client.is_connected:
-                await client.disconnect()
-
-    print(f"✅ Hoàn thành xử lý Anchor {address}, không quét lại!")
 
 
 async def process_anchor(address):
@@ -255,7 +184,7 @@ async def process_tag(address, max_retries=3):
                 DISCONNECTED_TAGS.discard(address)  # Đánh dấu là đã kết nối lại
                 # Nhận notify từ Tag
                 await client.start_notify(LOCATION_DATA_UUID,
-                                          lambda s, d: asyncio.create_task(tag_callback(s, d, address))
+                                          lambda s, d: asyncio.create_task(notification_handler(s, d, address))
                                           )
 
                 while client.is_connected:
@@ -271,7 +200,6 @@ async def process_tag(address, max_retries=3):
                 if client.is_connected:
                     await client.disconnect()
 
-        # Nếu thử 3 lần vẫn lỗi thì vào chế độ chờ, quét lại mỗi 10s
         print(f"🔄 Không thể kết nối {address}, thử lại sau {TIMEOUT}s ...")
         DISCONNECTED_TAGS.add(address)
         await asyncio.sleep(TIMEOUT)
@@ -281,27 +209,24 @@ async def main():
     """Chương trình chính."""
     await connect_to_server_2()
 
-    # Tìm các thiết bị BLE
+    # # Tìm các thiết bị BLE
     devices = await BleakScanner.discover(10)
     anchors = [dev.address for dev in devices if dev.address in MAC_ADDRESS_ANCHOR_LIST]
     print(f"Danh sách anchor: {anchors}")
-
-
-    # Case 1: Xử lý từng anchor (chỉ chạy một lần)
-    # for anchor in anchors:
-    #     await process_anchor(anchor)
-
-
-    # Case 2: Chạy nhiều task đồng thời và cùng chờ kết thúc.
-    anchor_tasks = [asyncio.create_task(process_anchor_2(anchor)) for anchor in anchors]
+    #
+    #
+    #
+    # # Xử lý từng anchor (chỉ chạy một lần)
+    # # for anchor in anchors:
+    # #     await process_anchor(anchor)
+    #
+    anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
     await asyncio.gather(*anchor_tasks)
 
-
-
-    # print("Chờ server lệnh để xử lý Tag...")
-    # # Khởi chạy task cho từng Tag
-    # tasks = [asyncio.create_task(process_tag(tag)) for tag in TAG_MAC_LIST]
-    # await asyncio.gather(*tasks)
+    print("Chờ server lệnh để xử lý Tag...")
+    # Khởi chạy task cho từng Tag
+    tasks = [asyncio.create_task(process_tag(tag)) for tag in TAG_MAC_LIST]
+    await asyncio.gather(*tasks)
 
     await sio.disconnect()
 
@@ -311,3 +236,5 @@ if __name__ == "__main__":
         asyncio.run(main())
     except RuntimeError as e:
         print(f"❌ Lỗi runtime: {e}")
+#  14
+#n 11.6

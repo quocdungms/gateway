@@ -96,7 +96,7 @@ async def start_tracking(data=None):
     """Bật tracking từ server."""
     global tracking_enabled
     tracking_enabled = True
-    print("Tracking đã bật!")
+    print("✅ Tracking đã bật!")
 
 
 @sio.on("stop_tracking")
@@ -104,7 +104,7 @@ async def stop_tracking(data=None):
     """Tắt tracking từ server."""
     global tracking_enabled
     tracking_enabled = False
-    print("Tracking đã dừng!")
+    print("❌ Tracking đã dừng!")
 
 
 async def notification_handler(sender, data, address):
@@ -215,12 +215,14 @@ async def main():
     anchors = [dev.address for dev in devices if dev.address in MAC_ADDRESS_ANCHOR_LIST]
     print(f"Danh sách anchor: {anchors}")
 
+    #
+    #
     # Xử lý từng anchor (chỉ chạy một lần)
-    # for anchor in anchors:
-    #     await process_anchor(anchor)
+    for anchor in anchors:
+        await process_anchor(anchor)
 
-    anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
-    await asyncio.gather(*anchor_tasks)
+    # anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
+    # await asyncio.gather(*anchor_tasks)
 
     print("Chờ server lệnh để xử lý Tag...")
     # Khởi chạy task cho từng Tag

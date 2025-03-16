@@ -7,12 +7,8 @@ from location import decode_location_data
 from global_var import *
 
 
-# for kalman ######################
-# from filterpy.kalman import KalmanFilter
 import numpy as np
-###################################
-
-
+from filterpy.kalman import KalmanFilter
 
 sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
@@ -52,64 +48,6 @@ async def connect_to_server(max_retries=3):
             return
         except Exception as e:
             print(f"❌ Lỗi kết nối server: {e}")
-
-
-# Khởi tạo bộ lọc Kalman thủ công
-kalman_filters = {}
-
-def init_kalman_filter():
-    kf = {
-        "x": np.array([[0], [0], [0], [0]]),  # Trạng thái [x, vx, y, vy]
-        "P": np.eye(4) * 1000,  # Hiệp phương sai
-        "F": np.array([[1, 1, 0, 0],
-                        [0, 1, 0, 0],
-                        [0, 0, 1, 1],
-                        [0, 0, 0, 1]]),
-        "H": np.array([[1, 0, 0, 0],
-                        [0, 0, 1, 0]]),
-        "R": np.eye(2) * 5,  # Nhiễu đo lường
-        "Q": np.eye(4) * 0.01  # Nhiễu quá trình
-    }
-    return kf
-
-def kalman_predict(kf):
-    kf["x"] = np.dot(kf["F"], kf["x"])
-    kf["P"] = np.dot(np.dot(kf["F"], kf["P"]), kf["F"].T) + kf["Q"]
-
-def kalman_update(kf, z):
-    y = z - np.dot(kf["H"], kf["x"])
-    S = np.dot(np.dot(kf["H"], kf["P"]), kf["H"].T) + kf["R"]
-    K = np.dot(np.dot(kf["P"], kf["H"].T), np.linalg.inv(S))
-    kf["x"] += np.dot(K, y)
-    kf["P"] = np.dot((np.eye(4) - np.dot(K, kf["H"])), kf["P"])
-
-async def notification_handler_kalman(sender, data, address):
-    global tracking_enabled, last_sent_time, INTERVAL, kalman_filters
-    decoded_data = decode_location_data(data)
-    current_time = time.time()
-
-    x, y = decoded_data.get("x", 0), decoded_data.get("y", 0)
-    if address not in kalman_filters:
-        kalman_filters[address] = init_kalman_filter()
-        kalman_filters[address]["x"] = np.array([[x], [0], [y], [0]])
-
-    kf = kalman_filters[address]
-    kalman_predict(kf)
-    kalman_update(kf, np.array([[x], [y]]))
-    smoothed_x, smoothed_y = kf["x"][0, 0], kf["x"][2, 0]
-
-    filtered_data = {"x": smoothed_x, "y": smoothed_y}
-
-    if tracking_enabled:
-        await safe_emit("tag_data", {"mac": address, "data": filtered_data})
-        print(f"Filtered Data: {filtered_data}")
-    else:
-        last_sent = last_sent_time.get(address, 0)
-        if current_time - last_sent >= INTERVAL:
-            await safe_emit("tag_data", {"mac": address, "data": filtered_data})
-            last_sent_time[address] = current_time
-            print(f"Filtered Data Sent: {filtered_data}")
-
 
 
 async def connect_to_server_2(max_retries=3):
@@ -173,7 +111,7 @@ async def stop_tracking(data=None):
     print("Tracking đã dừng!")
 
 
-async def notification_handler(sender, data, address):
+async def _notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
     global tracking_enabled, last_sent_time, INTERVAL
     decoded_data = decode_location_data(data)
@@ -189,6 +127,52 @@ async def notification_handler(sender, data, address):
             last_sent_time[address] = current_time
             print(
                 f"Tracing = {tracking_enabled} - Delay: {INTERVAL}s\nTag [{address}] gửi dữ liệu!\nData: {decoded_data} \n")
+
+
+# Dictionary lưu Kalman Filter cho từng Tag
+kalman_filters = {}
+
+
+def init_kalman():
+    """Khởi tạo Kalman Filter cho mỗi Tag."""
+    kf = KalmanFilter(dim_x=2, dim_z=1)  # Trạng thái (vị trí, vận tốc), đo chỉ có vị trí
+    dt = 0.1  # Khoảng thời gian lấy mẫu 0.1s
+    kf.F = np.array([[1, dt], [0, 1]])  # Ma trận trạng thái
+    kf.H = np.array([[1, 0]])  # Ma trận đo (chỉ đo vị trí)
+    kf.P *= 500  # Độ không chắc chắn ban đầu
+    kf.Q = np.array([[0.01, 0], [0, 0.01]])  # Nhiễu hệ thống
+    kf.R = np.array([[4]])  # Nhiễu đo
+    kf.x = np.array([[0], [0]])  # Khởi tạo trạng thái (vị trí = 0, vận tốc = 0)
+    return kf
+
+
+async def notification_handler(sender, data, address):
+    """Xử lý dữ liệu từ BLE notify và lọc nhiễu bằng Kalman."""
+    global tracking_enabled, last_sent_time, INTERVAL, kalman_filters
+    decoded_data = decode_location_data(data)
+    current_time = time.time()
+    position = decoded_data["position"]  # Giả sử dữ liệu đo có key "position"
+
+    # Khởi tạo Kalman Filter nếu Tag chưa có
+    if address not in kalman_filters:
+        kalman_filters[address] = init_kalman()
+    kf = kalman_filters[address]
+
+    # Áp dụng Kalman Filter
+    kf.predict()
+    kf.update(position)
+    filtered_position = kf.x[0, 0]  # Lấy vị trí đã lọc
+    decoded_data["position"] = filtered_position  # Gán lại vào dữ liệu
+
+    if tracking_enabled:
+        await safe_emit("tag_data", {"mac": address, "data": decoded_data})
+        print(f"📡 Tag {address} gửi ngay! Data: {decoded_data} ")
+    else:
+        last_sent = last_sent_time.get(address, 0)
+        if current_time - last_sent >= INTERVAL:
+            await safe_emit("tag_data", {"mac": address, "data": decoded_data})
+            last_sent_time[address] = current_time
+            print(f"📡 Tag {address} gửi sau {INTERVAL}s! Data: {decoded_data} ")
 
 
 async def process_anchor(address):
@@ -249,14 +233,9 @@ async def process_tag(address, max_retries=3):
                 print(f"✅ Kết nối {address} thành công, bắt đầu nhận dữ liệu...")
                 DISCONNECTED_TAGS.discard(address)  # Đánh dấu là đã kết nối lại
                 # Nhận notify từ Tag
-                # await client.start_notify(LOCATION_DATA_UUID,
-                #                           lambda s, d: asyncio.create_task(notification_handler(s, d, address))
-                #                           )
-
                 await client.start_notify(LOCATION_DATA_UUID,
-                                          lambda s, d: asyncio.create_task(notification_handler_kalman(s, d, address))
+                                          lambda s, d: asyncio.create_task(notification_handler(s, d, address))
                                           )
-
 
                 while client.is_connected:
                     await asyncio.sleep(1)  # Giữ kết nối
@@ -281,17 +260,19 @@ async def main():
     """Chương trình chính."""
     await connect_to_server_2()
 
-    # Tìm các thiết bị BLE
-    devices = await BleakScanner.discover(10)
-    anchors = [dev.address for dev in devices if dev.address in MAC_ADDRESS_ANCHOR_LIST]
-    print(f"Danh sách anchor: {anchors}")
-
-    # Xử lý từng anchor (chỉ chạy một lần)
-    # for anchor in anchors:
-    #     await process_anchor(anchor)
-
-    anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
-    await asyncio.gather(*anchor_tasks)
+    # # Tìm các thiết bị BLE
+    # devices = await BleakScanner.discover(10)
+    # anchors = [dev.address for dev in devices if dev.address in MAC_ADDRESS_ANCHOR_LIST]
+    # print(f"Danh sách anchor: {anchors}")
+    #
+    #
+    #
+    # # Xử lý từng anchor (chỉ chạy một lần)
+    # # for anchor in anchors:
+    # #     await process_anchor(anchor)
+    #
+    # anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
+    # await asyncio.gather(*anchor_tasks)
 
     print("Chờ server lệnh để xử lý Tag...")
     # Khởi chạy task cho từng Tag
