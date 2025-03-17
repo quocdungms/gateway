@@ -5,18 +5,134 @@ import socketio
 from bleak import BleakClient, BleakScanner, BleakError
 from location import decode_location_data
 from global_var import *
-from utils import *
-
-
 
 sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 
-tracking_enabled = False
+TRACKING_ENABLE = False
 last_sent_time = {}  # Lưu thời gian gửi gần nhất của từng tag
 INTERVAL = 5
 TIMEOUT = 5
 DISCONNECTED_TAGS = set()  # Danh sách Tag bị mất kết nối
+
+
+
+# NETWORK NODE  CHARACTERISTIC
+SERVICE_UUID = "680c21d9-c946-4c1f-9c11-baa1c21329e7"
+NAME_UUID = "00002a00-0000-1000-8000-00805f9b34fb"  # Label (GAP service)
+OPERATION_MODE_UUID = "3f0afd88-7770-46b0-b5e7-9fc099598964"  # Operation mode UUID
+LOCATION_DATA_UUID = "003bbdf2-c634-4b3d-ab56-7ec889b89a37"  # Location Data
+LOCATION_DATA_MODE_UUID = "a02b947e-df97-4516-996a-1882521e0ead"  # Location Data Mode
+
+
+NETWORK_NODE_SERVICE_UUID = "680c21d9-c946-4c1f-9c11-baa1c21329e7"
+LABEL_CHAR_UUID = "00002a00-0000-1000-8000-00805f9b34fb"
+OPERATION_MODE_CHAR_UUID = "3f0afd88-7770-46b0-b5e7-9fc099598964"
+LOCATION_DATA_CHAR_UUID = "003bbdf2-c634-4b3d-ab56-7ec889b89a37"
+
+
+
+DEVICE_INFO = "1e63b1ebd4ed-444eaf54-c1e965192501"
+NETWORK_ID_UUID = "80f9d8bc-3bff-45bb-a181-2d6a37991208"
+# ANCHOR SPECIFIC
+
+LOCATION_PROXY_UUID = "f4a67d7d-379d-4183-9c03-4b6ea5103291"
+
+# TAG SPECIFIC
+UPDATE_RATE_UUID = "7bd47f30-5602-4389-b069-8305731308b6"
+
+TAG_MAC = "EB:52:53:F5:D5:90"
+TAG_2 = "E9:82:21:9E:C8:8F"
+TAG_MAC_LIST= [
+  'EB:52:53:F5:D5:90',
+  'E9:82:21:9E:C8:8F'
+]
+# SERVER URL
+# SERVER_URL = "http://172.16.2.92:5000"
+# SERVER_URL = "http://192.168.137.128:5000"
+SERVER_URL = "http://localhost:5000"
+MAC_ADDRESS_ANCHOR_LIST = [ 
+  'D7:7A:01:92:9B:DB',
+  'C8:70:52:60:9F:38',
+  'EB:C3:F1:BC:24:DD',
+  'E7:E1:0F:DA:2D:82'
+]
+
+
+
+
+
+
+
+
+import struct
+
+def decode_location_data(data):
+    try:
+        mode = data[0]
+        if mode == 0:
+            if len(data) <= 13:
+                print("Invalid Type 0 data: Expected 13 bytes")
+                return None
+            return decode_location_mode_0(data)
+        elif mode == 1:
+            return decode_location_mode_1(data)
+        elif mode == 2:
+            return decode_location_mode_2(data)
+        else:
+            print(f"Unknown location mode: {mode}")
+
+    except Exception as e:
+        print(f"Error decoding location: {e}")
+        return None
+
+
+# Position Only
+def decode_location_mode_0(data):
+    result = {}
+    # location_mode = data[0]
+    # result["Mode:"] = location_mode
+    x, y, z, quality_position = struct.unpack("<i i i B", data[1:14])
+    result["Position"] = {
+        "X": x / 1000,  # Chuyển từ mm sang m
+        "Y": y / 1000,
+        "Z": z / 1000,
+        "Quality Factor": quality_position
+    }
+    return result
+
+# Distances Only
+def decode_location_mode_1(data):
+    result = {}
+    distances = []
+    distance_count = data[0]
+    result["Distances count:"] = distance_count
+    for i in range(distance_count):
+        offset = 1 + i * 7
+        node_id, distance, quality = struct.unpack("<H i B", data[offset:offset + 7])
+        distances.append({
+            "Node ID": node_id,
+            "Distance": distance / 1000,  # Chuyển từ mm sang m
+            "Quality Factor": quality
+        })
+    result["Distances"] = distances
+    return result
+
+# Hàm giải mã Location Data Mode 2 (Position + Distances)
+def decode_location_mode_2(data):
+    result = {}
+    mode_0 = decode_location_mode_0(data[:14])
+    mode_1 = decode_location_mode_1(data[14:])
+    result.update(mode_0)
+    result.update(mode_1)
+    return result
+
+
+
+# data = bytearray(b'\x02\xc3\x02\x00\x00\x1e\x02\x00\x00i\x04\x00\x008\x04\x0f')
+# data_1 =  bytearray(b'\x02\xc3\x02\x00\x00\x1e\x02\x00\x00i\x04\x00\x008\x04\x0f\xd4\x0e\t\x00\x00d\x9a\xd2y\x06\x00\x00d\x11\xc5-\x08\x00\x00d\x0e\xc6\xed\x08\x00\x00d')
+#
+# print_result(decode_location_mode_1(data_1[14:]))
 
 
 async def safe_emit(event, data):
@@ -97,22 +213,22 @@ async def disconnect():
 @sio.on("start_tracking")
 async def start_tracking(data=None):
     """Bật tracking từ server."""
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = True
-    print("Tracking đã bật!")
+    print("✅ Tracking đã bật!")
 
 
 @sio.on("stop_tracking")
 async def stop_tracking(data=None):
     """Tắt tracking từ server."""
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = False
-    print("Tracking đã dừng!")
+    print("❌ Tracking đã dừng!")
 
 
-async def tag_callback(sender, data, address):
+async def notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
-    global tracking_enabled, last_sent_time, INTERVAL
+    global TRACKING_ENABLE, last_sent_time, INTERVAL
     decoded_data = decode_location_data(data)
     current_time = time.time()
 
@@ -126,74 +242,6 @@ async def tag_callback(sender, data, address):
             last_sent_time[address] = current_time
             print(
                 f"Tracing = {tracking_enabled} - Delay: {INTERVAL}s\nTag [{address}] gửi dữ liệu!\nData: {decoded_data} \n")
-
-
-
-def bytes_array_to_bits(data):
-    bit_string = ""
-    for byte in data:
-        bits = bin(byte)[2:].zfill(8)
-        bit_string += bits + " "
-    return bit_string.strip()
-
-async def process_anchor_2(address):
-    """Xử lý kết nối với Anchor: Chuyển từ read sang notify và gửi cả location & operation mode"""
-    client = BleakClient(address)
-    anchor_data = {"location": None, "operation_mode": None}  # Lưu dữ liệu trước khi gửi
-
-    async def anchor_notification_handler(sender, data):
-        nonlocal anchor_data
-        if sender == LOCATION_DATA_UUID:
-            anchor_data["location"] = decode_location_data(data)
-        elif sender == OPERATION_MODE_UUID:
-            operation_mode_value = bytes_array_to_bits(data)
-            anchor_data["operation_mode"] = operation_mode_value # Chuyển sang dạng nhị phân
-
-        # Chỉ gửi lên server khi cả hai dữ liệu đều đã có
-        if anchor_data["location"] is not None and anchor_data["operation_mode"] is not None:
-            print(f"📡 Anchor {address} gửi dữ liệu: {anchor_data['location']}, Mode: {anchor_data['operation_mode']}")
-            # await safe_emit("anchor_data", {
-            #     "mac": address,
-            #     "data": anchor_data["location"],
-            #     "operation_mode": anchor_data["operation_mode"]
-            # })
-            # Reset dữ liệu để nhận gói mới
-            anchor_data = {"location": None, "operation_mode": None}
-
-    while True:
-        try:
-            print(f"🔍 Đang kết nối Anchor {address}...")
-            await client.connect()
-            if not client.is_connected:
-                print(f"❌ Không thể kết nối {address}, thử lại sau {TIMEOUT} giây...")
-                await asyncio.sleep(TIMEOUT)
-                continue
-
-            print(f"✅ Đã kết nối {address}, bắt đầu nhận notify...")
-
-            # Đăng ký nhận notify từ Anchor cho cả 2 đặc tính
-            await client.start_notify(LOCATION_DATA_UUID, anchor_notification_handler)
-            await asyncio.sleep(2)
-            await client.stop_notify(LOCATION_DATA_UUID)
-
-
-            await client.start_notify(OPERATION_MODE_UUID, anchor_notification_handler)
-            await asyncio.sleep(2)
-            await client.stop_notify(OPERATION_MODE_UUID)
-
-            # while client.is_connected:
-            #     await asyncio.sleep(1)  # Giữ kết nối
-
-        except BleakError as e:
-            print(f"❌ Lỗi BLE {address}: {e}")
-            await asyncio.sleep(TIMEOUT)
-        except Exception as e:
-            print(f"❌ Lỗi không xác định với {address}: {e}")
-        finally:
-            if client.is_connected:
-                await client.disconnect()
-
-    print(f"✅ Hoàn thành xử lý Anchor {address}, không quét lại!")
 
 
 async def process_anchor(address):
@@ -255,7 +303,7 @@ async def process_tag(address, max_retries=3):
                 DISCONNECTED_TAGS.discard(address)  # Đánh dấu là đã kết nối lại
                 # Nhận notify từ Tag
                 await client.start_notify(LOCATION_DATA_UUID,
-                                          lambda s, d: asyncio.create_task(tag_callback(s, d, address))
+                                          lambda s, d: asyncio.create_task(notification_handler(s, d, address))
                                           )
 
                 while client.is_connected:
@@ -286,22 +334,19 @@ async def main():
     anchors = [dev.address for dev in devices if dev.address in MAC_ADDRESS_ANCHOR_LIST]
     print(f"Danh sách anchor: {anchors}")
 
+    #
+    #
+    # Xử lý từng anchor (chỉ chạy một lần)
+    for anchor in anchors:
+        await process_anchor(anchor)
 
-    # Case 1: Xử lý từng anchor (chỉ chạy một lần)
-    # for anchor in anchors:
-    #     await process_anchor(anchor)
+    # anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
+    # await asyncio.gather(*anchor_tasks)
 
-
-    # Case 2: Chạy nhiều task đồng thời và cùng chờ kết thúc.
-    anchor_tasks = [asyncio.create_task(process_anchor_2(anchor)) for anchor in anchors]
-    await asyncio.gather(*anchor_tasks)
-
-
-
-    # print("Chờ server lệnh để xử lý Tag...")
-    # # Khởi chạy task cho từng Tag
-    # tasks = [asyncio.create_task(process_tag(tag)) for tag in TAG_MAC_LIST]
-    # await asyncio.gather(*tasks)
+    print("Chờ server lệnh để xử lý Tag...")
+    # Khởi chạy task cho từng Tag
+    tasks = [asyncio.create_task(process_tag(tag)) for tag in TAG_MAC_LIST]
+    await asyncio.gather(*tasks)
 
     await sio.disconnect()
 

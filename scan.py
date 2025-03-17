@@ -1,27 +1,24 @@
 import asyncio
 from bleak import BleakClient
 
-# UUID của Battery Service và Battery Level Characteristic
-BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
-BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
 
 # Địa chỉ Bluetooth của thiết bị (thay bằng địa chỉ thực tế của bạn)
-DEVICE_ADDRESS = "D7:7A:01:92:9B:DB"  # Ví dụ, thay bằng địa chỉ thiết bị của bạn
+DEVICE_ADDRESS = "EB:52:53:F5:D5:90"  # Ví dụ, thay bằng địa chỉ thiết bị của bạn
 
+OPERATION_MODE_UUID = "3f0afd88-7770-46b0-b5e7-9fc099598964"
+def bytearray_to_bits(byte_arr):
+    return ''.join(f"{byte:08b}" for byte in byte_arr)
 
-async def get_battery_level():
+async def get_op():
     try:
         # Kết nối tới thiết bị
         async with BleakClient(DEVICE_ADDRESS) as client:
             if client.is_connected:
                 print(f"Đã kết nối tới thiết bị: {DEVICE_ADDRESS}")
 
-                # Đọc giá trị từ Battery Level Characteristic
-                battery_level = await client.read_gatt_char(BATTERY_LEVEL_UUID)
-
-                # Giá trị trả về là byte, chuyển thành phần trăm (0-100)
-                battery_percentage = int.from_bytes(battery_level, "little")
-                print(f"Mức pin: {battery_percentage}%")
+                op = await client.read_gatt_char(OPERATION_MODE_UUID)
+                op = bytearray_to_bits(op)
+                print(f"op: {op}")
             else:
                 print("Không thể kết nối tới thiết bị.")
     except Exception as e:
@@ -30,4 +27,4 @@ async def get_battery_level():
 
 # Chạy chương trình
 if __name__ == "__main__":
-    asyncio.run(get_battery_level())
+    asyncio.run(get_op())

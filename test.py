@@ -8,7 +8,7 @@ from global_var import *
 sio = socketio.AsyncClient()
 
 anchors = []
-tracking_enabled = False  # Biến để kiểm soát việc gửi dữ liệu từ Tag
+TRACKING_ENABLE = False  # Biến để kiểm soát việc gửi dữ liệu từ Tag
 
 
 async def safe_emit(event, data):
@@ -22,14 +22,14 @@ def notification_handler(sender, data, address):
     decoded_data = decode_location_data(data)
     print(f"Nhận dữ liệu từ {address}: {decoded_data}")
 
-    if tracking_enabled:
+    if TRACKING_ENABLE:
         asyncio.create_task(safe_emit("tag_data", {"mac": str(address), "data": decoded_data}))
 
 def _notification_handler(sender, data):
     decoded_data = decode_location_data(data)
     print(f"Nhận dữ liệu từ {sender}: {decoded_data}")
 
-    if tracking_enabled:
+    if TRACKING_ENABLE:
         asyncio.create_task(safe_emit("tag_data", {"mac": str(sender), "data": decoded_data}))
         asyncio.sleep(10)
 
@@ -43,14 +43,14 @@ async def connect_to_server():
 
 @sio.on("start_tracking")
 async def start_tracking(data=None):
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = True
     print("Tracking đã được bật!")
 
 
 @sio.on("stop_tracking")
 async def stop_tracking(data=None):
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = False
     print("Tracking đã dừng!")
 
@@ -111,7 +111,7 @@ async def process_device(address, is_tag=False, max_retries=3):
             if is_tag:
                 print(f"Chờ lệnh từ server để bắt đầu gửi dữ liệu từ tag {address}...")
                 while True:
-                    if tracking_enabled:
+                    if TRACKING_ENABLE:
                         await client.start_notify(LOCATION_DATA_UUID, lambda sender, data: notification_handler(sender, data, address))
                         print(f"Tag {address} đang gửi data...")
                         await asyncio.sleep(2)

@@ -1,4 +1,8 @@
+from colorama import Fore, Style
 import struct
+
+
+
 
 def decode_location_data(data):
     try:
@@ -51,7 +55,7 @@ def decode_location_mode_1(data):
     result["Distances"] = distances
     return result
 
-# Hàm giải mã Location Data Mode 2 (Position + Distances)
+# Position + Distances)
 def decode_location_mode_2(data):
     result = {}
     mode_0 = decode_location_mode_0(data[:14])
@@ -62,7 +66,33 @@ def decode_location_mode_2(data):
 
 
 
-# data = bytearray(b'\x02\xc3\x02\x00\x00\x1e\x02\x00\x00i\x04\x00\x008\x04\x0f')
-# data_1 =  bytearray(b'\x02\xc3\x02\x00\x00\x1e\x02\x00\x00i\x04\x00\x008\x04\x0f\xd4\x0e\t\x00\x00d\x9a\xd2y\x06\x00\x00d\x11\xc5-\x08\x00\x00d\x0e\xc6\xed\x08\x00\x00d')
-#
-# print_result(decode_location_mode_1(data_1[14:]))
+
+
+class MyPrint:
+    SUCCESS_ICON = "✅"
+    ERROR_ICON = "❌"
+    INFO_ICON = "ℹ️"
+    RECONNECT_ICON = "🔄"
+    WARNING_ICON = "⚠️"
+
+    @staticmethod
+    def info(msg):
+        print(MyPrint.INFO_ICON + " " + Fore.LIGHTCYAN_EX + msg + Style.RESET_ALL)
+
+    @staticmethod
+    def success(msg):
+        print(MyPrint.SUCCESS_ICON + " " + Fore.LIGHTGREEN_EX + msg + Style.RESET_ALL)
+
+    @staticmethod
+    def warning(msg):
+        print(MyPrint.WARNING_ICON + " " + Fore.YELLOW + msg + Style.RESET_ALL)
+
+    @staticmethod
+    def error(msg):
+        print(MyPrint.ERROR_ICON + " " + Fore.LIGHTRED_EX + msg + Style.RESET_ALL)
+
+    @staticmethod
+    def reconnect(msg):
+        print(MyPrint.RECONNECT_ICON + " " + Fore.LIGHTCYAN_EX + msg + Style.RESET_ALL)
+
+# MyPrint.reconnect("Đang xử lý tag...")

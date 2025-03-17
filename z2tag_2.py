@@ -11,7 +11,7 @@ from global_var import *
 sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 
-tracking_enabled = False
+TRACKING_ENABLE = False
 last_sent_time = {}  # Lưu thời gian gửi gần nhất của từng tag
 cached_data = {}  # Lưu dữ liệu mới nhất của từng tag
 
@@ -36,7 +36,7 @@ async def connect_to_server():
 @sio.on("start_tracking")
 async def start_tracking(data=None):
     """Bật tracking từ server."""
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = True
     print("🚀 Tracking đã bật!")
 
@@ -44,7 +44,7 @@ async def start_tracking(data=None):
 @sio.on("stop_tracking")
 async def stop_tracking(data=None):
     """Tắt tracking từ server."""
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = False
     print("🛑 Tracking đã dừng!")
 
@@ -55,7 +55,7 @@ def notification_handler(sender, data, address):
     decoded_data = decode_location_data(data)
     current_time = time.time()
 
-    if tracking_enabled:
+    if TRACKING_ENABLE:
         asyncio.create_task(safe_emit("tag_data", {"mac": address, "data": decoded_data}))
         print(f"📡 [Tracking] Tag {address} gửi ngay: {decoded_data}")
     else:

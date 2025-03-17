@@ -14,7 +14,7 @@ sio = socketio.AsyncClient()
 
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 anchors = []
-tracking_enabled = False  # Biến để kiểm soát việc gửi dữ liệu từ Tag
+TRACKING_ENABLE = False  # Biến để kiểm soát việc gửi dữ liệu từ Tag
 
 
 async def safe_emit(event, data):
@@ -34,14 +34,14 @@ async def connect_to_server():
 
 @sio.on("start_tracking")
 async def start_tracking(data=None):
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = True
     print("Tracking đã được bật!")
 
 
 @sio.on("stop_tracking")
 async def stop_tracking(data=None):
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = False
     print("Tracking đã dừng!")
 
@@ -89,7 +89,7 @@ def notification_handler(sender, data, address):
     decoded_data = decode_location_data(data)
     # print(f"Nhận dữ liệu từ {address}: {decoded_data}")
 
-    if tracking_enabled:
+    if TRACKING_ENABLE:
         asyncio.create_task(safe_emit("tag_data", {"mac": str(address), "data": decoded_data}))
         current_time = datetime.now(time_zone).strftime("%Y-%m-%d %H:%M:%S")
         print(f"Tag: {str(address)} gửi dữ liệu. Time: {str(current_time)} \n data: {decoded_data}\n")
@@ -106,7 +106,7 @@ async def notification_handler_test(sender, data, address):
     current_time = time.time()  # Lấy thời gian hiện tại
     last_time = last_sent_time.get(address, 0)  # Lấy lần gửi gần nhất của tag này
 
-    if tracking_enabled:
+    if TRACKING_ENABLE:
         # Nếu tracking_enabled == True, gửi ngay lập tức
         await safe_emit("tag_data", {"mac": address, "data": decoded_data})
         print(f"Tag {address} gửi dữ liệu ngay lập tức: {decoded_data}")
@@ -145,7 +145,7 @@ async def process_device(address, is_tag=False, max_retries=3):
             if is_tag:
                 print(f"Chờ lệnh từ server để bắt đầu gửi dữ liệu từ tag {address}...")
                 while True:
-                    if tracking_enabled:
+                    if TRACKING_ENABLE:
                         await client.start_notify(LOCATION_DATA_UUID,
                                                   lambda sender, data: notification_handler_test(sender, data, address))
                         print(f"Tag {address} đang gửi data... Tracking = true")

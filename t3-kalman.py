@@ -13,7 +13,7 @@ from filterpy.kalman import KalmanFilter
 sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 
-tracking_enabled = False
+TRACKING_ENABLE = False
 last_sent_time = {}  # Lưu thời gian gửi gần nhất của từng tag
 INTERVAL = 5
 TIMEOUT = 5
@@ -98,7 +98,7 @@ async def disconnect():
 @sio.on("start_tracking")
 async def start_tracking(data=None):
     """Bật tracking từ server."""
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = True
     print("Tracking đã bật!")
 
@@ -106,14 +106,14 @@ async def start_tracking(data=None):
 @sio.on("stop_tracking")
 async def stop_tracking(data=None):
     """Tắt tracking từ server."""
-    global tracking_enabled
+    global TRACKING_ENABLE
     tracking_enabled = False
     print("Tracking đã dừng!")
 
 
 async def _notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
-    global tracking_enabled, last_sent_time, INTERVAL
+    global TRACKING_ENABLE, last_sent_time, INTERVAL
     decoded_data = decode_location_data(data)
     current_time = time.time()
 
@@ -148,7 +148,7 @@ def init_kalman():
 
 async def notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify và lọc nhiễu bằng Kalman."""
-    global tracking_enabled, last_sent_time, INTERVAL, kalman_filters
+    global TRACKING_ENABLE, last_sent_time, INTERVAL, kalman_filters
     decoded_data = decode_location_data(data)
     current_time = time.time()
     position = decoded_data["position"]  # Giả sử dữ liệu đo có key "position"
