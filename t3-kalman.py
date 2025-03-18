@@ -14,7 +14,7 @@ sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 
 TRACKING_ENABLE = False
-last_sent_time = {}  # Lưu thời gian gửi gần nhất của từng tag
+LAST_SENT_TIME = {}  # Lưu thời gian gửi gần nhất của từng tag
 INTERVAL = 5
 TIMEOUT = 5
 DISCONNECTED_TAGS = set()  # Danh sách Tag bị mất kết nối
@@ -113,7 +113,7 @@ async def stop_tracking(data=None):
 
 async def _notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
-    global TRACKING_ENABLE, last_sent_time, INTERVAL
+    global TRACKING_ENABLE, LAST_SENT_TIME, INTERVAL
     decoded_data = decode_location_data(data)
     current_time = time.time()
 
@@ -148,7 +148,7 @@ def init_kalman():
 
 async def notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify và lọc nhiễu bằng Kalman."""
-    global TRACKING_ENABLE, last_sent_time, INTERVAL, kalman_filters
+    global TRACKING_ENABLE, LAST_SENT_TIME, INTERVAL, kalman_filters
     decoded_data = decode_location_data(data)
     current_time = time.time()
     position = decoded_data["position"]  # Giả sử dữ liệu đo có key "position"

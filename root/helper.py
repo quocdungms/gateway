@@ -2,6 +2,15 @@ from colorama import Fore, Style
 import struct
 
 
+def bit_string_to_byte_array(bit_string: str) -> bytearray:
+    while len(bit_string) % 8 != 0:
+        bit_string = "0" + bit_string
+    byte_list = [int(bit_string[i:i+8], 2) for i in range(0, len(bit_string), 8)]
+    return bytearray(byte_list)
+
+
+
+
 
 
 def decode_location_data(data):

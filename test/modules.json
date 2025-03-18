@@ -1,0 +1,40 @@
+[
+    {
+        "id": "E7:E1:0F:DA:2D:82",
+        "name": "DWC60E",
+        "type": "anchor",
+        "status": "active"
+    },
+    {
+        "id": "C8:70:52:60:9F:38",
+        "name": "DWC511",
+        "type": "anchor",
+        "status": "active"
+    },
+    {
+        "id": "D7:7A:01:92:9B:DB",
+        "name": "DWD29A",
+        "type": "anchor",
+        "status": "active"
+      },
+    {
+
+        "id": "EB:C3:F1:BC:24:DD",
+        "name": "DWD40F",
+        "type": "anchor",
+        "status": "active"
+    },
+    {
+
+        "id": "EB:52:53:F5:D5:90",
+        "name": "DWCE07",
+        "type": "tag",
+        "status": "none"
+    },
+    {
+        "id": "E9:82:21:9E:C8:8F",
+        "name": "DWD61E",
+        "type": "tag",
+        "status": "none"
+    }
+]

@@ -11,7 +11,7 @@ sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 
 TRACKING_ENABLE = False
-last_sent_time = {}  # Lưu thời gian gửi gần nhất của từng tag
+LAST_SENT_TIME = {}  # Lưu thời gian gửi gần nhất của từng tag
 INTERVAL = 5
 async def safe_emit(event, data):
     """Gửi dữ liệu lên server một cách an toàn."""
@@ -49,7 +49,7 @@ async def stop_tracking(data=None):
 async def notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
 
-    global TRACKING_ENABLE, last_sent_time, INTERVAL
+    global TRACKING_ENABLE, LAST_SENT_TIME, INTERVAL
     decoded_data = decode_location_data(data)
     current_time = time.time()
 

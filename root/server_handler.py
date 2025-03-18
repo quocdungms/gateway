@@ -1,6 +1,6 @@
 import socketio
 import asyncio
-from config import SERVER_URL
+from config import SERVER_URL, TAG_MAC_LIST, ANCHOR_MAC_LIST
 
 
 sio = socketio.AsyncClient()
@@ -11,15 +11,12 @@ command_queue = asyncio.Queue()
 async def safe_emit(event, data):
     if sio.connected:
         await sio.emit(event, data)
-        return True
     else:
         print(f"❌ Không thể gửi '{event}' vì không kết nối với server!")
-        return False
 
 async def connect_to_server(max_retries=3):
     """Kết nối đến server với khả năng tự động thử lại."""
     global sio
-
     if sio.connected:
         print("✅ Đã kết nối đến Server!")
         return
@@ -77,13 +74,39 @@ async def stop_tracking(data=None):
     print("Tracking đã dừng!")
 
 @sio.on("update-device")
-async def update_operation(data):
-    mode = data.get("type")
-    mac_address = data.get("data", {}).get("mac")
-    payload = data.get("data", {}).get("payload")
-    if mode == "operation" and mac_address and payload:
-        await command_queue.put((mac_address, payload))
-        print(f"Nhận lệnh update {mac_address}: {payload}")
+async def update_device_handler(msg):
+    from ble_hanlder import set_operation_mode, set_location_mode, set_anchor_location, set_tag_rate
 
+    cmd = msg.get("command")
+    data = msg.get("data", {})
+    mac_address = data.get("mac")
+    payload = data.get("payload")
+    # print(f"Nhan yeu cau tu server: command: {cmd}, data: {data}")
+
+    if all([cmd, mac_address, payload]) is not None:
+        print(f"Nhan lenh: {cmd} cho {mac_address}, payload: {payload}")
+        await command_queue.put((cmd, mac_address, payload))
+
+
+    is_tag = mac_address in TAG_MAC_LIST
+    is_anchor = mac_address in ANCHOR_MAC_LIST
+
+    if not (is_tag or is_anchor):
+        print(f"Khong tim thay {mac_address} trong danh sach thiet bi")
+        return
+    if cmd == "set-operation-mode":
+        if is_tag:
+            set_operation_mode(mac_address, payload, device_type = "tag")
+        else:
+            set_operation_mode(mac_address, payload, device_type = "anchor")
+    elif cmd == "set-location-mode":
+        if is_tag:
+            set_location_mode(mac_address,payload,device_type="tag")
+        else:
+            set_location_mode(mac_address,payload,device_type="anchor")
+    elif cmd == "set-anchor-location":
+        set_anchor_location(mac_address,payload)
+    elif cmd == "set-tag-rate":
+        set_tag_rate(mac_address,payload)
 
 

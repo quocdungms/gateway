@@ -1,10 +1,10 @@
 import asyncio
-from tkinter.constants import CURRENT
+
 
 import pytz
 from bleak import BleakClient, BleakScanner, BleakError
 from helper import decode_location_data
-from server_handler import safe_emit
+
 from config import OPERATION_MODE_UUID, LOCATION_DATA_MODE_UUID, LOCATION_DATA_UUID
 import time
 
@@ -12,15 +12,27 @@ import time
 # Global_var
 TIMEOUT = 5
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
-last_sent_time = {}
+LAST_SENT_TIME = {}
 INTERVAL = 5
 DISCONNECTED_TAGS = set()
+
+def set_operation_mode(mac_address, payload, device_type):
+    print("sdaasg")
+
+def set_location_mode(mac_address, payload, device_type):
+    print("sdaasg")
+
+def set_anchor_location(mac_address, payload, device_type):
+    print("sdaasg")
+
+def set_tag_rate(mac_address, payload, device_type):
+    print("sdaasg")
 
 
 async def notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
-    global last_sent_time, INTERVAL
-    from server_handler import TRACKING_ENABLE
+    global LAST_SENT_TIME, INTERVAL
+    from server_handler import TRACKING_ENABLE, safe_emit
     decoded_data = decode_location_data(data)
     current_time = time.time()
 
@@ -38,6 +50,7 @@ async def notification_handler(sender, data, address):
 
 async def process_anchor(address):
     """Xử lý kết nối với Anchor: Chỉ kết thúc khi gửi dữ liệu thành công."""
+    from server_handler import safe_emit
     client = BleakClient(address)
     while True:
         try:
@@ -93,13 +106,12 @@ async def process_tag(address, max_retries=3):
                 DISCONNECTED_TAGS.discard(address)  # Đánh dấu là đã kết nối lại
                 # Nhận notify từ Tag
                 current_uuid = LOCATION_DATA_UUID
+
                 await client.start_notify(current_uuid,
                                           lambda s, d: asyncio.create_task(notification_handler(s, d, address))
                                           )
 
                 while client.is_connected:
-                    try:
-
                     await asyncio.sleep(1)  # Giữ kết nối
 
             except BleakError as e:
@@ -117,11 +129,21 @@ async def process_tag(address, max_retries=3):
         DISCONNECTED_TAGS.add(address)
         await asyncio.sleep(TIMEOUT)
 
-async def ensure_notify_stopped(client, current_uuid):
-    if await client.stop_notify(current_uuid):
-        return True
-    return False
 
-async def write_operation_mode(client, address, operation_mode):
-    from helper import byte
-    operation_mode =
+
+# async def write_operation_mode(client, address, operation_data, current_uuid, max_retry=3) :
+#     await client.stop_notify(current_uuid)
+#     from helper import bit_string_to_byte_array
+#     operation_data = bit_string_to_byte_array(operation_data)
+#     for attempt in range(max_retry):
+#         try:
+#             await client.write_gatt_char(OPERATION_MODE_UUID, operation_data)
+#             print(f"Ghi du lieu operation mode thanh cong vao {address}")
+#             break
+#         except BleakError as e:
+#             attempt += 1
+#             print(f"Loi khi ghi operation mode (lan {attempt}) : {e}")
+#             if attempt <= max_retry:
+#                 await asyncio.sleep(TIMEOUT)
+#
+#     # print(f"✅ Ghi operation mode thành công {address}")

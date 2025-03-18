@@ -9,8 +9,8 @@ from global_var import *
 sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
 
-TRACKING_ENABLE = False
-last_sent_time = {}  # Lưu thời gian gửi gần nhất của từng tag
+TRACKING_ENABLED = False
+LAST_SENT_TIME = {}  # Lưu thời gian gửi gần nhất của từng tag
 INTERVAL = 5
 TIMEOUT = 5
 DISCONNECTED_TAGS = set()  # Danh sách Tag bị mất kết nối
@@ -94,35 +94,35 @@ async def disconnect():
 @sio.on("start_tracking")
 async def start_tracking(data=None):
     """Bật tracking từ server."""
-    global TRACKING_ENABLE
+    global TRACKING_ENABLED
     tracking_enabled = True
-    print("✅ Tracking đã bật!")
+    print("Tracking đã bật!")
 
 
 @sio.on("stop_tracking")
 async def stop_tracking(data=None):
     """Tắt tracking từ server."""
-    global TRACKING_ENABLE
+    global TRACKING_ENABLED
     tracking_enabled = False
-    print("❌ Tracking đã dừng!")
+    print("Tracking đã dừng!")
 
 
 async def notification_handler(sender, data, address):
     """Xử lý dữ liệu từ BLE notify, kiểm soát tần suất gửi."""
-    global TRACKING_ENABLE, last_sent_time, INTERVAL
+    global TRACKING_ENABLED, LAST_SENT_TIME, INTERVAL
     decoded_data = decode_location_data(data)
     current_time = time.time()
 
-    if tracking_enabled:
+    if TRACKING_ENABLED:
         await safe_emit("tag_data", {"mac": address, "data": decoded_data})
-        print(f"Tracking = {tracking_enabled}\nTag {address} gửi ngay!\nData: {decoded_data} \n")
+        print(f"Tracking = {TRACKING_ENABLED}\nTag {address} gửi ngay!\nData: {decoded_data} \n")
     else:
-        last_sent = last_sent_time.get(address, 0)
+        last_sent = LAST_SENT_TIME.get(address, 0)
         if current_time - last_sent >= INTERVAL:
             await safe_emit("tag_data", {"mac": address, "data": decoded_data})
-            last_sent_time[address] = current_time
+            LAST_SENT_TIME[address] = current_time
             print(
-                f"Tracing = {tracking_enabled} - Delay: {INTERVAL}s\nTag [{address}] gửi dữ liệu!\nData: {decoded_data} \n")
+                f"Tracing = {TRACKING_ENABLED} - Delay: {INTERVAL}s\nTag [{address}] gửi dữ liệu!\nData: {decoded_data} \n")
 
 
 async def process_anchor(address):
@@ -215,12 +215,12 @@ async def main():
     anchors = [dev.address for dev in devices if dev.address in MAC_ADDRESS_ANCHOR_LIST]
     print(f"Danh sách anchor: {anchors}")
 
-    #
-    #
-    # Xử lý từng anchor (chỉ chạy một lần)
-    for anchor in anchors:
-        await process_anchor(anchor)
 
+
+    # Xử lý từng anchor (chỉ chạy một lần)
+    # for anchor in anchors:
+    #     await process_anchor(anchor)
+    #
     # anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
     # await asyncio.gather(*anchor_tasks)
 
