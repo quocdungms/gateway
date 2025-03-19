@@ -1,12 +1,14 @@
 import asyncio
 import time
+from queue import Queue
 from xmlrpc.client import Boolean
 
 import pytz
 import socketio
 from bleak import BleakClient, BleakScanner, BleakError
 from location import decode_location_data
-from global_var import *
+from config import *
+
 
 sio = socketio.AsyncClient()
 time_zone = pytz.timezone('Asia/Ho_Chi_Minh')
@@ -18,7 +20,11 @@ TIMEOUT = 5
 DISCONNECTED_TAGS = set()  # Danh sách Tag bị mất kết nối
 
 queue_location = asyncio.Queue()
+command_queue = asyncio.Queue()
 
+
+MODULE_STATUS = {}
+TASK_MANAGER = {}
 async def safe_emit(event, data):
     if sio.connected:
         await sio.emit(event, data)
@@ -40,6 +46,71 @@ async def connect_to_server():
             print(f"❌ Lỗi kết nối server: {e}")
             print(f"🔄 Server vẫn chưa kết nối được, thử lại sau {TIMEOUT} giây...")
             await asyncio.sleep(TIMEOUT)
+def bits_to_bytes_array(bit_string):
+    # Đảm bảo chuỗi bit có độ dài là bội số của 8
+    bit_string = bit_string.zfill((len(bit_string) + 7) // 8 * 8)
+
+    # Chuyển đổi sang số nguyên
+    integer_value = int(bit_string, 2)
+
+    # Chuyển thành mảng byte
+    byte_length = len(bit_string) // 8
+    return integer_value.to_bytes(byte_length, byteorder='big')
+
+@sio.on("server_req")
+async def server_req(msg):
+    cmd = msg.get("command")
+    payload = msg.get("payload", {})
+    mac = payload.get("mac")
+    data = payload.get("data")
+
+    # if all([cmd, mac, data]) is not None:
+    #     await command_queue.put((cmd, mac, data))
+
+    if not all([cmd, mac, data]):
+        print("Du lieu server_req khong hop le!")
+
+    if MODULE_STATUS.get(mac) == "processing":
+        print(f"⏸️ Dừng task của {mac} để ghi dữ liệu...")
+        if mac in TASK_MANAGER and not TASK_MANAGER[mac].done():
+            TASK_MANAGER[mac].cancel()
+            try:
+                await TASK_MANAGER[mac]
+            except asyncio.CancelledError:
+                print(f"✅ Task của {mac} đã dừng.")
+
+    MODULE_STATUS[mac] = "writing"
+    print(f"📝 Ghi dữ liệu vào {mac}: {data}")
+    # (Ghi dữ liệu BLE vào module ở đây)
+    await asyncio.sleep(1)  # Giả lập thời gian ghi
+    client = BleakClient(mac)
+
+    try:
+
+        await client.connect()
+        if not client.is_connected:
+            raise BleakError(f"Thiết bị {mac} không kết nối được!")
+
+        if cmd == "set-operation-mode":
+            operation_mode = bits_to_bytes_array(data)
+            await client.write_gatt_char(OPERATION_MODE_UUID, operation_mode)
+            print(f"✅ Ghi operation mode {mac} thành công")
+            await asyncio.sleep(1)
+
+    except BleakError as ble:
+        print(f"❌ Lỗi BLE với {mac}: {ble}")
+    except Exception as e:
+        print(f"❌ Lỗi khi ghi dữ liệu vào module {mac}: {e}")
+    finally:
+        if client.is_connected:
+            await client.disconnect()
+
+
+    MODULE_STATUS[mac] = 'idle'
+
+    # Khởi động lại task cũ
+    print(f"🔄 Khởi động lại {mac}...")
+    TASK_MANAGER[mac] = asyncio.create_task(process_tag(mac))
 
 
 @sio.event
@@ -61,6 +132,8 @@ async def stop_tracking(data=None):
     global TRACKING_ENABLED
     TRACKING_ENABLED = False
     print("Tracking đã dừng!")
+
+
 
 
 async def notification_handler(sender, data, address):
@@ -89,6 +162,8 @@ async def send_location_handler():
                     print(f"🕒 Tag [{address}] gửi dữ liệu (INTERVAL={INTERVAL}s)\nData: {location}")
                 LAST_SENT_TIME[address] = current_time
         await asyncio.sleep(0.1)
+
+
 async def process_anchor(address):
     """Xử lý kết nối với Anchor: Chỉ kết thúc khi gửi dữ liệu thành công."""
     client = BleakClient(address)
@@ -147,6 +222,7 @@ async def process_tag(address, max_retries=3):
                 print(f"✅ Kết nối {address} thành công, bắt đầu nhận dữ liệu...")
                 DISCONNECTED_TAGS.discard(address)  # Đánh dấu là đã kết nối lại
                 # Nhận notify từ Tag
+                MODULE_STATUS[address] = 'processing'
                 await client.start_notify(LOCATION_DATA_UUID, lambda s, d: asyncio.create_task(notification_handler(s,d,address)))
                 print(f"✅ Đã kích hoạt notify thành công cho {address}!")
                 while client.is_connected:
@@ -188,13 +264,22 @@ async def main():
     # anchor_tasks = [asyncio.create_task(process_anchor(anchor)) for anchor in anchors]
     # await asyncio.gather(*anchor_tasks)
 
-    print("Chờ server lệnh để xử lý Tag...")
+
+    # # Khởi chạy task cho từng Tag
+    # for tag in TAG_MAC_LIST:
+    #     await asyncio.create_task(process_tag(tag))
+    # # await asyncio.gather(*tasks)
+
+
+
+
     # Khởi chạy task cho từng Tag
     for tag in TAG_MAC_LIST:
-        await asyncio.create_task(process_tag(tag))
+        TASK_MANAGER[tag] = asyncio.create_task(process_tag(tag))
     # await asyncio.gather(*tasks)
 
-    await sio.disconnect()
+
+    await sio.wait()
 
 
 if __name__ == "__main__":
