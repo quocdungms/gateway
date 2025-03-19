@@ -1,10 +1,8 @@
 import asyncio
-import struct
 import socketio
-from bleak import BleakClient, BleakScanner, BleakError
-from location import decode_location_data
-from global_var import TAG_MAC, SERVER_URL, LOCATION_DATA_UUID, LOCATION_DATA_MODE_UUID, MAC_ADDRESS_ANCHOR_LIST, \
-    OPERATION_MODE_UUID
+from bleak import BleakClient, BleakError
+from messy.location import decode_location_data
+from messy.global_var import TAG_MAC, SERVER_URL, LOCATION_DATA_UUID, OPERATION_MODE_UUID
 
 sio = socketio.AsyncClient()
 

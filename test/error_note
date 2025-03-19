@@ -1,0 +1,8 @@
+00:28 20/03
+Lỗi khi chuyển anchor sang tag không nhận được toạ độ vị trí
+=> có thể tag mới chưa được cập nhật network id (pans id của mạng) nên không nằm trong mạng lưới định vị
+-> ko được phép kết nối đến các anchor có sẵn
+-> ko tính được vị trí
+
+cách fix (có khả năng)
+===> lấy network_id của anchor -> ghi vào network id của tag rồi mới chạy lại task

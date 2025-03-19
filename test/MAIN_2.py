@@ -4,7 +4,7 @@ import struct
 import pytz
 import socketio
 from bleak import BleakClient, BleakScanner, BleakError
-from location import decode_location_data
+
 from config import *
 
 
@@ -129,6 +129,9 @@ async def server_req(msg):
     if not all([cmd, mac, data]):
         print("Du lieu server_req khong hop le!")
 
+    print(f"⬇️ Nhận server request: {cmd} {mac} {data}")
+
+
     if MODULE_STATUS.get(mac) == "processing":
         print(f"⏸️ Dừng task của {mac} để ghi dữ liệu...")
         if mac in TASK_MANAGER and not TASK_MANAGER[mac].done():
@@ -142,28 +145,37 @@ async def server_req(msg):
     print(f"📝 Ghi dữ liệu vào {mac}: {data}")
     # (Ghi dữ liệu BLE vào module ở đây)
     await asyncio.sleep(1)  # Giả lập thời gian ghi
+
     client = BleakClient(mac)
 
-    try:
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
 
-        await client.connect()
-        if not client.is_connected:
-            raise BleakError(f"Thiết bị {mac} không kết nối được!")
+            await client.connect()
 
-        if cmd == "set-operation-mode":
-            operation_mode = bits_to_bytes_array(data)
-            await client.write_gatt_char(OPERATION_MODE_UUID, operation_mode)
-            print(f"✅ Ghi operation mode {mac} thành công")
-            await asyncio.sleep(1)
+            if not client.is_connected:
+                raise BleakError(f"Thiết bị {mac} không kết nối được! Thử lại lần {attempt + 1}/3")
 
-    except BleakError as ble:
-        print(f"❌ Lỗi BLE với {mac}: {ble}")
-    except Exception as e:
-        print(f"❌ Lỗi khi ghi dữ liệu vào module {mac}: {e}")
-    finally:
-        if client.is_connected:
-            await client.disconnect()
+            if cmd == "set-operation-mode":
+                operation_mode = bits_to_bytes_array(data)
+                await client.write_gatt_char(OPERATION_MODE_UUID, operation_mode)
+                print(f"✅ Ghi operation mode {mac} thành công")
+                await asyncio.sleep(1)
 
+            break  # Nếu kết nối thành công, thoát vòng lặp
+
+        except BleakError as ble:
+            print(f"❌ Lỗi BLE với {mac}: {ble}")
+        except Exception as e:
+            print(f"❌ Lỗi khi ghi dữ liệu vào module {mac}: {e}")
+        finally:
+            if client.is_connected:
+                await client.disconnect()
+
+        if attempt < max_retries:
+            print(f"🔄 Thử kết nối lại {mac} sau 3 giây...")
+            await asyncio.sleep(3)
 
     MODULE_STATUS[mac] = 'idle'
 
