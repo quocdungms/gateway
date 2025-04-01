@@ -294,6 +294,7 @@ async def process_tag(address, max_retries=3):
                 DISCONNECTED_TAGS.discard(address)  # Đánh dấu là đã kết nối lại
                 # Nhận notify từ Tag
                 MODULE_STATUS[address] = 'processing'
+                await client.read_gatt_char(LOCATION_DATA_UUID)
                 await client.start_notify(LOCATION_DATA_UUID, lambda s, d: asyncio.create_task(notification_handler(s,d,address)))
                 print(f"✅ Đã kích hoạt notify thành công cho {address}!")
                 while client.is_connected:
@@ -345,9 +346,13 @@ async def main():
 
 
     # Khởi chạy task cho từng Tag
-    for tag in TAG_MAC_LIST:
-        TASK_MANAGER[tag] = asyncio.create_task(process_tag(tag))
-    # await asyncio.gather(*tasks)
+
+    TASK_MANAGER["E7:E1:0F:DA:2D:82"] = asyncio.create_task(process_tag("E7:E1:0F:DA:2D:82"))
+
+
+    # for tag in TAG_MAC_LIST:
+    #     TASK_MANAGER[tag] = asyncio.create_task(process_tag(tag))
+    # # await asyncio.gather(*tasks)
 
 
     await sio.wait()

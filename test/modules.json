@@ -2,8 +2,8 @@
     {
         "id": "E7:E1:0F:DA:2D:82",
         "name": "DWC60E",
-        "type": "tag",
-        "operation": "0101010100100000",
+        "type": "anchor",
+        "operation": "1101100100100000",
         "status": "active"
     },
     {
@@ -30,7 +30,7 @@
     {
         "id": "EB:52:53:F5:D5:90",
         "name": "DWCE07",
-        "type": "tagz",
+        "type": "tag",
         "operation": "0101010100100000",
         "status": "active"
     }

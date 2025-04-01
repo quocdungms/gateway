@@ -229,26 +229,20 @@ async def update_modules_json(mac, new_type, operation_mode):
             # Nếu file tạm vẫn còn (trong trường hợp lỗi), hãy xóa nó
             if os.path.exists(temp_filename):
                 os.remove(temp_filename)
+@sio.on("set_anchor_location")
+async def set_anchor_location(msg):
+    mac_addr = msg.get("mac")
+    data = msg.get("data",{})
 
-@sio.on("server_req")
-async def server_req(msg):
-    cmd = msg.get("command")
-    payload = msg.get("payload", {})
-    mac_addr = payload.get("mac")
-    data = payload.get("data")
-    # if all([cmd, mac, data]) is not None:
-    #     await command_queue.put((cmd, mac, data))
-
-    if not all([cmd, mac_addr, data]):
+    if not all([mac_addr, data]):
         print("Du lieu server_req khong hop le!")
 
-    print(f"⬇️ Nhận server request: {cmd} {mac_addr} {data}")
+    print(f"⬇️ Nhận server request: {set_anchor_location} {mac_addr} {data}")
 
     if mac_addr not in MODULE_TYPE:
         print(f"Module {mac_addr} không tồn tại!")
         return
 
-    restart_task = True
     if MODULE_STATUS.get(mac_addr) == "processing":
         print(f"⏸️ Dừng task của {mac_addr} để ghi dữ liệu...")
         if mac_addr in TASK_MANAGER and not TASK_MANAGER[mac_addr].done():
@@ -270,88 +264,52 @@ async def server_req(msg):
             await client.connect()
             if not client.is_connected:
                 raise BleakError(f"Thiết bị {mac_addr} không kết nối được! Thử lại lần {attempt + 1}/3")
-            if cmd == "set_operation_mode":
-                operation_mode_binary = data
-                operation_mode_bytes = bits_to_bytes_array(operation_mode_binary)
-                await client.write_gatt_char(OPERATION_MODE_UUID, operation_mode_bytes)
-                print(f"✅ Ghi operation mode {mac_addr} thành công")
-                new_type = determine_module_type(operation_mode_binary)
-                if new_type != MODULE_TYPE[mac_addr]:
-                    MODULE_TYPE[mac_addr] = new_type
-                    await update_modules_json(mac_addr,new_type,operation_mode_binary)
-                # if new_type == "anchor":
-                #     restart_task = False
-            elif cmd == "set_location_mode":
-                location_mode_int = data
-                location_mode_bytes = location_mode_int.to_bytes(1, byteorder='big')  # hoặc 'little'
-                await client.write_gatt_char(LOCATION_DATA_MODE_UUID, location_mode_bytes)
-                print(f"✅ Ghi location mode cho {mac_addr} thành công")
 
-            elif cmd == "set_tag_rate":
-                u1_int = data.get("u1")
-                u2_int = data.get("u2")
-                rate_data_to_write = int_to_bytes_array_location(u1_int) + int_to_bytes_array_location(u2_int)
-                await client.write_gatt_char(UPDATE_RATE_UUID, rate_data_to_write)
-                print(f"✅ Update tag rate {mac_addr} thành công. U1: {u1_int}ms, U2: {u2_int}ms")
-            elif cmd == "set_anchor_location":
-                ##### Đang lỗi phân biệt tag và anchor, set anchor thì ko restart task
-                x_float = data.get("x")
-                y_float = data.get("y")
-                z_float = data.get("z")
-                quality_factor = data.get("quality_factor")
-                if not isinstance(quality_factor, int) or quality_factor < 1 or quality_factor > 100:
-                    raise ValueError("Quality factor phải là số nguyên từ 1 đến 100")
+            x_float = data.get("x")
+            y_float = data.get("y")
+            z_float = data.get("z")
+            quality_factor = data.get("quality_factor")
+            if not isinstance(quality_factor, int) or quality_factor < 1 or quality_factor > 100:
+                raise ValueError("Quality factor phải là số nguyên từ 1 đến 100")
 
-                x_bytes = float_to_int32_bytes(x_float)
-                y_bytes = float_to_int32_bytes(y_float)
-                z_bytes = float_to_int32_bytes(z_float)
-                quality_factor_bytes = bytearray([quality_factor])
+            x_bytes = float_to_int32_bytes(x_float)
+            y_bytes = float_to_int32_bytes(y_float)
+            z_bytes = float_to_int32_bytes(z_float)
+            quality_factor_bytes = bytearray([quality_factor])
 
-                data_to_write = x_bytes + y_bytes + z_bytes + quality_factor_bytes
-                await client.write_gatt_char(PERSISTED_POSITION, data_to_write)
-                print(f"✅ Set anchor location {mac_addr} thành công!\n"
-                      f"x: {x_float}, y: {y_float}, z: {z_float}, qulity_factor: {quality_factor}")
+            data_to_write = x_bytes + y_bytes + z_bytes + quality_factor_bytes
+            await client.write_gatt_char(PERSISTED_POSITION, data_to_write)
+            print(f"✅ Set anchor location {mac_addr} thành công!\n"
+                  f"x: {x_float}, y: {y_float}, z: {z_float}, qulity_factor: {quality_factor}")
 
-
-
-
-
-            is_succeed = True
-            await safe_emit("gateway_res", {
-                "result": "succeed",
-                "command": cmd,
-                "mac": mac_addr
-            })
+            # is_succeed = True
+            # await safe_emit("gateway_res", {
+            #     "result": "succeed",
+            #     "command",
+            #     "mac": mac_addr
+            # })
             await asyncio.sleep(1)
             break  # Nếu kết nối thành công, thoát vòng lặp
 
         except BleakError as ble:
             print(f"❌ Lỗi BLE với {mac_addr}: {ble}")
+
         except Exception as e:
             print(f"❌ Lỗi khi ghi dữ liệu vào module {mac_addr}: {e}")
         finally:
             if client.is_connected:
                 await client.disconnect()
 
-        if attempt < max_retries:
-            print(f"🔄 Thử kết nối lại {mac_addr} sau 3 giây...")
-            await asyncio.sleep(3)
+            if attempt < max_retries:
+                print(f"🔄 Thử kết nối lại {mac_addr} sau 3 giây...")
+                await asyncio.sleep(3)
 
-
-    if not is_succeed:
-        await safe_emit("gateway_res", {
-            "result": "error",
-            "command": str(cmd),
-            "mac": str(mac_addr),
-        })
-
-    # if is_stopped_task:
-    #     # Cập nhật lại module status
-    #
-    #     MODULE_STATUS[mac_addr] = 'idle'
-    #     # Khởi động lại task cũ
-    #     print(f"🔄 Khởi động lại task: {mac_addr}...")
-    #     TASK_MANAGER[mac_addr] = asyncio.create_task(process_tag(mac_addr))
+        # if not is_succeed:
+        #     await safe_emit("gateway_res", {
+        #         "result": "error",
+        #         "command": str(cmd),
+        #         "mac": str(mac_addr),
+        #     })
 
     MODULE_STATUS[mac_addr] = 'idle'
     if MODULE_TYPE[mac_addr] == "tag":
@@ -362,14 +320,146 @@ async def server_req(msg):
         TASK_MANAGER[mac_addr] = asyncio.create_task(process_anchor(mac_addr))
 
 
-    # if MODULE_TYPE[mac_addr] == "anchor" and not restart_task:
-    #     print(f"Không cần chạy lại task!")
-    #     return
-
-    # MODULE_STATUS[mac_addr] = 'idle'
-    # # Khởi động lại task cũ
-    # print(f"🔄 Khởi động lại task: {mac_addr}...")
-    # TASK_MANAGER[mac_addr] = asyncio.create_task(process_tag(mac_addr))
+# @sio.on("server_req")
+# async def server_req(msg):
+#     cmd = msg.get("command")
+#     payload = msg.get("payload", {})
+#     mac_addr = payload.get("mac")
+#     data = payload.get("data")
+#     # if all([cmd, mac, data]) is not None:
+#     #     await command_queue.put((cmd, mac, data))
+#
+#     if not all([cmd, mac_addr, data]):
+#         print("Du lieu server_req khong hop le!")
+#
+#     print(f"⬇️ Nhận server request: {cmd} {mac_addr} {data}")
+#
+#     if mac_addr not in MODULE_TYPE:
+#         print(f"Module {mac_addr} không tồn tại!")
+#         return
+#
+#     restart_task = True
+#     if MODULE_STATUS.get(mac_addr) == "processing":
+#         print(f"⏸️ Dừng task của {mac_addr} để ghi dữ liệu...")
+#         if mac_addr in TASK_MANAGER and not TASK_MANAGER[mac_addr].done():
+#             TASK_MANAGER[mac_addr].cancel()
+#             try:
+#                 await TASK_MANAGER[mac_addr]
+#             except asyncio.CancelledError:
+#                 print(f"✅ Task của {mac_addr} đã dừng.")
+#
+#     MODULE_STATUS[mac_addr] = "writing"
+#     print(f"📝 Ghi dữ liệu vào {mac_addr}: {data}")
+#     # (Ghi dữ liệu BLE vào module ở đây)
+#     await asyncio.sleep(1)
+#     client = BleakClient(mac_addr)
+#     max_retries = 3
+#     is_succeed = False
+#     for attempt in range(max_retries):
+#         try:
+#             await client.connect()
+#             if not client.is_connected:
+#                 raise BleakError(f"Thiết bị {mac_addr} không kết nối được! Thử lại lần {attempt + 1}/3")
+#             if cmd == "set_operation_mode":
+#                 operation_mode_binary = data
+#                 operation_mode_bytes = bits_to_bytes_array(operation_mode_binary)
+#                 await client.write_gatt_char(OPERATION_MODE_UUID, operation_mode_bytes)
+#                 print(f"✅ Ghi operation mode {mac_addr} thành công")
+#                 new_type = determine_module_type(operation_mode_binary)
+#                 if new_type != MODULE_TYPE[mac_addr]:
+#                     MODULE_TYPE[mac_addr] = new_type
+#                     await update_modules_json(mac_addr,new_type,operation_mode_binary)
+#                 # if new_type == "anchor":
+#                 #     restart_task = False
+#             elif cmd == "set_location_mode":
+#                 location_mode_int = data
+#                 location_mode_bytes = location_mode_int.to_bytes(1, byteorder='big')  # hoặc 'little'
+#                 await client.write_gatt_char(LOCATION_DATA_MODE_UUID, location_mode_bytes)
+#                 print(f"✅ Ghi location mode cho {mac_addr} thành công")
+#
+#             elif cmd == "set_tag_rate":
+#                 u1_int = data.get("u1")
+#                 u2_int = data.get("u2")
+#                 rate_data_to_write = int_to_bytes_array_location(u1_int) + int_to_bytes_array_location(u2_int)
+#                 await client.write_gatt_char(UPDATE_RATE_UUID, rate_data_to_write)
+#                 print(f"✅ Update tag rate {mac_addr} thành công. U1: {u1_int}ms, U2: {u2_int}ms")
+#             elif cmd == "set_anchor_location":
+#                 ##### Đang lỗi phân biệt tag và anchor, set anchor thì ko restart task
+#                 x_float = data.get("x")
+#                 y_float = data.get("y")
+#                 z_float = data.get("z")
+#                 quality_factor = data.get("quality_factor")
+#                 if not isinstance(quality_factor, int) or quality_factor < 1 or quality_factor > 100:
+#                     raise ValueError("Quality factor phải là số nguyên từ 1 đến 100")
+#
+#                 x_bytes = float_to_int32_bytes(x_float)
+#                 y_bytes = float_to_int32_bytes(y_float)
+#                 z_bytes = float_to_int32_bytes(z_float)
+#                 quality_factor_bytes = bytearray([quality_factor])
+#
+#                 data_to_write = x_bytes + y_bytes + z_bytes + quality_factor_bytes
+#                 await client.write_gatt_char(PERSISTED_POSITION, data_to_write)
+#                 print(f"✅ Set anchor location {mac_addr} thành công!\n"
+#                       f"x: {x_float}, y: {y_float}, z: {z_float}, qulity_factor: {quality_factor}")
+#
+#
+#
+#
+#
+#             is_succeed = True
+#             await safe_emit("gateway_res", {
+#                 "result": "succeed",
+#                 "command": cmd,
+#                 "mac": mac_addr
+#             })
+#             await asyncio.sleep(1)
+#             break  # Nếu kết nối thành công, thoát vòng lặp
+#
+#         except BleakError as ble:
+#             print(f"❌ Lỗi BLE với {mac_addr}: {ble}")
+#         except Exception as e:
+#             print(f"❌ Lỗi khi ghi dữ liệu vào module {mac_addr}: {e}")
+#         finally:
+#             if client.is_connected:
+#                 await client.disconnect()
+#
+#         if attempt < max_retries:
+#             print(f"🔄 Thử kết nối lại {mac_addr} sau 3 giây...")
+#             await asyncio.sleep(3)
+#
+#
+#     if not is_succeed:
+#         await safe_emit("gateway_res", {
+#             "result": "error",
+#             "command": str(cmd),
+#             "mac": str(mac_addr),
+#         })
+#
+#     # if is_stopped_task:
+#     #     # Cập nhật lại module status
+#     #
+#     #     MODULE_STATUS[mac_addr] = 'idle'
+#     #     # Khởi động lại task cũ
+#     #     print(f"🔄 Khởi động lại task: {mac_addr}...")
+#     #     TASK_MANAGER[mac_addr] = asyncio.create_task(process_tag(mac_addr))
+#
+#     MODULE_STATUS[mac_addr] = 'idle'
+#     if MODULE_TYPE[mac_addr] == "tag":
+#         print(f"🔄 Khởi động lại task: {mac_addr}...")
+#         TASK_MANAGER[mac_addr] = asyncio.create_task(process_tag(mac_addr))
+#     elif MODULE_TYPE[mac_addr] == "anchor":
+#         print(f"🔄 Khởi động lại task: {mac_addr}...")
+#         TASK_MANAGER[mac_addr] = asyncio.create_task(process_anchor(mac_addr))
+#
+#
+#     # if MODULE_TYPE[mac_addr] == "anchor" and not restart_task:
+#     #     print(f"Không cần chạy lại task!")
+#     #     return
+#
+#     # MODULE_STATUS[mac_addr] = 'idle'
+#     # # Khởi động lại task cũ
+#     # print(f"🔄 Khởi động lại task: {mac_addr}...")
+#     # TASK_MANAGER[mac_addr] = asyncio.create_task(process_tag(mac_addr))
 
 
 
