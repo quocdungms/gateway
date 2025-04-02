@@ -250,39 +250,30 @@ async def ensure_write_status(mac_addr: str) -> bool:
             TASK_MANAGER[mac_addr].cancel()
             try:
                 await TASK_MANAGER[mac_addr]
+                TASK_MANAGER[mac_addr] = 'idle'
+                return True
             except asyncio.CancelledError:
                 print(f"{ICON_DICT["SUCCESS"]} Task của {mac_addr} đã dừng.")
+                TASK_MANAGER[mac_addr] = 'idle'
                 return True
     return False
 
 
-async def prepare_module(cmd: str, mac_addr: str, data: str) -> bool:
+async def prepare_write_module(cmd: str, mac_addr: str, data: str) -> bool:
     if not all([mac_addr, data]):
         print(f"{ICON_DICT["ERROR"]} Dữ liệu {cmd} không hợp lệ!")
-        return False
-    if mac_addr not in MODULE_TYPE:
-        print(f"{ICON_DICT["ERROR"]} Module {mac_addr} không tồn tại!")
         return False
 
     print(f"{ICON_DICT["RECEIVE"]} Nhận request: {cmd}, {mac_addr}, {data}!")
     await ensure_write_status(mac_addr)
-    MODULE_STATUS[mac_addr] = "writing"
+    MODULE_STATUS[mac_addr] = 'writing'
     await asyncio.sleep(0.5)
     return True
 
 
 async def gateway_res(is_succeed: bool, command: str, mac_addr: str) -> None:
-    if is_succeed:
-        await safe_emit(command, {
-            "mac": mac_addr,
-            "result": "success"
-        })
-    else:
-        await safe_emit(command, {
-            "mac": mac_addr,
-            "result": "error"
-        })
-
+    result = "success" if is_succeed else "error"
+    await safe_emit(command, {"mac": mac_addr,"result": result})
 
 async def ble_write_with_retry(mac_addr, char_uuid, data_to_write, max_reties=3, timeout=3):
     client = BleakClient(mac_addr)
@@ -318,13 +309,10 @@ async def set_anchor_location(msg):
     mac_addr = msg.get("mac")
     data = msg.get('data', {})
 
-    if not await prepare_module(cmd, mac_addr, data):
+    if not await prepare_write_module(cmd, mac_addr, data):
         return
     try:
-        x_float = data.get("x")
-        y_float = data.get("y")
-        z_float = data.get("z")
-        quality_factor = data.get("quality_factor")
+        x_float, y_float, z_float, quality_factor = data.get("x"), data.get("y"), data.get("z"), data.get("quality_factor")
         if not isinstance(quality_factor, int) or quality_factor < 1 or quality_factor > 100:
             raise ValueError(f"{ICON_DICT["ERROR"]} Quality factor phải là số nguyên từ 1 đến 100")
 
@@ -352,7 +340,7 @@ async def set_tag_rate(msg):
     mac_addr = msg.get("mac")
     data = msg.get("data", {})
 
-    if not await prepare_module(cmd, mac_addr, data):
+    if not await prepare_write_module(cmd, mac_addr, data):
         return
     try:
         u1_int = data.get("u1")
@@ -383,7 +371,7 @@ async def set_location_mode(msg):
     mac_addr = msg.get("mac")
     data = msg.get("data", {})
 
-    if not await prepare_module(cmd, mac_addr, data):
+    if not await prepare_write_module(cmd, mac_addr, data):
         return
     try:
         location_mode_int = data.get("mode")
@@ -407,9 +395,8 @@ async def set_operation_mode(msg):
     mac_addr = msg.get("mac")
     data = msg.get("data", {})
 
-    if not await prepare_module(cmd, mac_addr, data):
+    if not await prepare_write_module(cmd, mac_addr, data):
         return
-
     try:
         operation_mode_binary = data
         old_type = MODULE_TYPE.get(mac_addr)
@@ -423,8 +410,11 @@ async def set_operation_mode(msg):
         # --------------- Developing---------------
         if old_type != new_type:
             MODULE_TYPE[mac_addr] = new_type
-            await update_modules_json(mac_addr, new_type, operation_mode_binary)
+
         # ----------------------------------------
+        await update_modules_json(mac_addr, new_type, operation_mode_binary)
+
+
     except Exception as e:
         is_succeed = False
         print(f"{ICON_DICT["ERROR"]} Lỗi ghi dữ liệu {cmd}, {mac_addr}: {e}")
@@ -461,7 +451,7 @@ async def stop_tracking(data=None):
 async def notification_handler(sender, data, mac_addr):
     try:
         decoded_data = decode_location_data(data)
-        min_quality_factor = 5
+        min_quality_factor = 30
         if "Distances count:" not in decoded_data or "Distances" not in decoded_data:
             # print(f"{ICON_DICT["WARNING"]} Dữ liệu từ {mac_addr} không hợp lệ, bỏ qua...")
             return
